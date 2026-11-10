@@ -6,7 +6,8 @@ import { dayKey } from "../lib/intensive";
 import { newMemory, nextIn, review } from "../lib/srs";
 import { tutorReady, type Correction } from "../lib/tutor";
 import type { GrammarTopic, Progress, Verdict } from "../lib/types";
-import { intervalCap } from "./plan";
+import { intervalCap, sessionLoad } from "./plan";
+import { loadLevel } from "../lib/store";
 import { RetryPanel, freshAttempt, type Attempt } from "./Round";
 
 interface Props {
@@ -34,7 +35,11 @@ export function GrammarRound({ progress, update, onDone }: Props) {
 
   useEffect(() => {
     loadGrammar()
-      .then((all) => setLoad({ state: "ready", topics: pickTopics(topicsFor(all, s.level), progress.memory, new Date(), 5) }))
+      .then(async (all) => {
+        const now = new Date();
+        const size = sessionLoad(progress, await loadLevel(s.level).catch(() => []), now).grammarSize; // intensive: more exercises
+        setLoad({ state: "ready", topics: pickTopics(topicsFor(all, s.level), progress.memory, now, size) });
+      })
       .catch((e: Error) => setLoad({ state: "error", message: e.message }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

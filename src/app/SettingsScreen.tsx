@@ -54,7 +54,7 @@ export function SettingsScreen({ progress, update }: Props) {
 
       <div className="panel form">
         <h2>Intensive mode</h2>
-        <p className="note">For an exam soon and little time: a daily goal, 20-item sprints, official-list words first, and no review scheduled after your exam.</p>
+        <p className="note">For an exam soon: the same tutor, word and Grammatik rounds, just more of them. A daily new-word goal from your exam date, official-list words first, and no review scheduled after your exam.</p>
         <fieldset className="field">
           <legend>Status</legend>
           <div className="segmented" role="radiogroup" aria-label="Intensive mode">

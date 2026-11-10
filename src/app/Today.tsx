@@ -5,9 +5,9 @@ import { nextIn } from "../lib/srs";
 import { loadGrammar, pickTopics, topicsFor } from "../lib/grammar";
 import { LEVELS, type GrammarTopic, type Progress } from "../lib/types";
 import { estimated, useLevel } from "./useLevel";
-import { currentPlan } from "./plan";
+import { sessionLoad } from "./plan";
 import { dayKey, daysUntil } from "../lib/intensive";
-import { SprintPanel } from "./SprintPanel";
+import { ExamStatus } from "./ExamStatus";
 
 interface Props {
   progress: Progress;
@@ -15,11 +15,10 @@ interface Props {
   onStart: () => void; // word round (extra)
   onTutor: () => void; // tutor session (main)
   onGrammar: () => void; // Grammatik round (extra)
-  onSprint: () => void;
 }
 
-export function Today({ progress, update, onStart, onTutor, onGrammar, onSprint }: Props) {
-  const { level, newPerRound } = progress.settings;
+export function Today({ progress, update, onStart, onTutor, onGrammar }: Props) {
+  const { level } = progress.settings;
   const [attempt, setAttempt] = useState(0);
   const data = useLevel(level, attempt);
   const now = new Date();
@@ -35,6 +34,9 @@ export function Today({ progress, update, onStart, onTutor, onGrammar, onSprint 
 
   const grammarDone = topics.filter((t) => progress.memory[t.id]?.card.state === 2).length;
   const nextTopic = pickTopics(topics, progress.memory, now, 1)[0];
+  // intensive mode only scales the normal rounds
+  const load = sessionLoad(progress, data.state === "ready" ? data.words : [], now);
+  const intensive = progress.settings.intensive.on;
 
   return (
     <section className="screen today" aria-labelledby="today-head">
@@ -52,8 +54,18 @@ export function Today({ progress, update, onStart, onTutor, onGrammar, onSprint 
       {/* main: the tutor */}
       <div className="panel tutor-main" aria-labelledby="tutor-head">
         <h2 id="tutor-head">Tutor session</h2>
+        {intensive && data.state === "ready" && (
+          <ExamStatus
+            plan={load.plan}
+            examDate={progress.settings.intensive.examDate}
+            daysLeft={progress.settings.intensive.examDate ? daysUntil(progress.settings.intensive.examDate, now) : NaN}
+            today={progress.daily?.[dayKey(now)]}
+            level={level}
+            wordsLeft={data.words.filter((w) => !progress.memory[w.id]).length}
+          />
+        )}
         <p>
-          Translate 6 sentences from {progress.settings.explainIn} into German. Each one practises one {level} word
+          Translate {load.tutorSize} sentences from {progress.settings.explainIn} into German. Each one practises one {level} word
           {topics.length > 0 && <> and a Grammatik topic{nextTopic && <>, starting with <strong lang="de">{nextTopic.label}</strong></>}</>}. The tutor corrects you and gives hints until you get it.
         </p>
         {ready ? (
@@ -79,17 +91,6 @@ export function Today({ progress, update, onStart, onTutor, onGrammar, onSprint 
         )}
       </div>
 
-      {data.state === "ready" && progress.settings.intensive.on && (
-        <SprintPanel
-          plan={currentPlan(progress, data.words, now)}
-          examDate={progress.settings.intensive.examDate}
-          daysLeft={progress.settings.intensive.examDate ? daysUntil(progress.settings.intensive.examDate, now) : NaN}
-          today={progress.daily?.[dayKey(now)]}
-          level={level}
-          stats={levelStats(data.words, progress.memory, now)}
-          onSprint={onSprint}
-        />
-      )}
 
       {/* extras: word and grammar rounds */}
       <h2 className="today__aux-head">Also practise</h2>
@@ -109,7 +110,7 @@ export function Today({ progress, update, onStart, onTutor, onGrammar, onSprint 
         )}
         {data.state === "ready" && (() => {
           const s = levelStats(data.words, progress.memory, now);
-          const round = buildRound(data.words, progress.memory, now, { size: 10, newMax: newPerRound, tutorReady: ready });
+          const round = buildRound(data.words, progress.memory, now, { size: load.wordSize, newMax: load.wordNewMax, tutorReady: ready, examFirst: load.examFirst, translateFrom: load.translateFrom });
           if (round.length === 0) {
             const nextDue = data.words.map((w) => progress.memory[w.id]).filter(Boolean).sort((a, b) => +new Date(a.card.due) - +new Date(b.card.due))[0];
             return (
@@ -138,7 +139,7 @@ export function Today({ progress, update, onStart, onTutor, onGrammar, onSprint 
           <div className="meter meter--thin" role="img" aria-label={`${grammarDone} of ${topics.length} ${level} grammar topics learned`}>
             <span style={{ inlineSize: `${(100 * grammarDone) / Math.max(1, topics.length)}%` }} />
           </div>
-          <button className="btn" type="button" onClick={onGrammar} disabled={!ready || topics.length === 0}>5 exercises</button>
+          <button className="btn" type="button" onClick={onGrammar} disabled={!ready || topics.length === 0}>{Math.min(load.grammarSize, topics.length || load.grammarSize)} exercises</button>
           {!ready && <p className="note">Needs the tutor key.</p>}
         </div>
       </div>

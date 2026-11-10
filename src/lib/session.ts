@@ -61,12 +61,22 @@ export function levelStats(words: Word[], memory: Record<string, Memory>, now: D
  * A translation round: words you have started come first (due ones oldest first), then new words
  * in frequency order. Every item is a "translate" exercise (AI-built sentence, AI-corrected answer).
  */
-export function buildTranslateRound(words: Word[], memory: Record<string, Memory>, now: Date, opts: { size: number }): Exercise[] {
+export function buildTranslateRound(
+  words: Word[],
+  memory: Record<string, Memory>,
+  now: Date,
+  opts: { size: number; newMax?: number; newFirst?: boolean; examFirst?: boolean },
+): Exercise[] {
   const started = words.filter((w) => memory[w.id]);
   const due = started.filter((w) => isDue(memory[w.id], now)).sort((a, b) => new Date(memory[a.id].card.due).getTime() - new Date(memory[b.id].card.due).getTime());
   const rest = started.filter((w) => !isDue(memory[w.id], now)).sort((a, b) => a.rank - b.rank);
-  const fresh = words.filter((w) => !memory[w.id]).sort((a, b) => a.rank - b.rank);
-  return [...due, ...rest, ...fresh].slice(0, opts.size).map((word) => ({ kind: "translate" as const, word }));
+  const fresh = words
+    .filter((w) => !memory[w.id])
+    .sort((a, b) => (opts.examFirst ? Number(b.anchored) - Number(a.anchored) : 0) || a.rank - b.rank)
+    .slice(0, opts.newMax ?? opts.size);
+  // intensive: new words (up to today's goal) before reviews that are not due yet
+  const order = opts.newFirst ? [...due, ...fresh, ...rest] : [...due, ...rest, ...fresh];
+  return order.slice(0, opts.size).map((word) => ({ kind: "translate" as const, word }));
 }
 
 /**
@@ -79,9 +89,9 @@ export function buildTutorSession(
   topics: GrammarTopic[],
   memory: Record<string, Memory>,
   now: Date,
-  opts: { size: number },
+  opts: { size: number; newMax?: number; newFirst?: boolean; examFirst?: boolean },
 ): Exercise[] {
-  const items = buildTranslateRound(words, memory, now, { size: opts.size });
+  const items = buildTranslateRound(words, memory, now, opts);
   const picked = pickTopics(topics, memory, now, Math.min(opts.size, topics.length));
   return items.map((e, i) => (picked.length ? { ...e, grammar: picked[i % picked.length] } : e));
 }

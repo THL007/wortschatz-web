@@ -7,12 +7,12 @@ import { newMemory, nextIn, review } from "../lib/srs";
 import { correct, correctTranslation, generateTask, targetLabel, tutorReady, type Correction, type TranslationTask } from "../lib/tutor";
 import type { Exercise, GrammarTopic, Memory, Progress, Verdict, Word } from "../lib/types";
 import { useLevel } from "./useLevel";
-import { currentPlan, intervalCap } from "./plan";
-import { dayKey, newLeftToday } from "../lib/intensive";
+import { intervalCap, sessionLoad } from "./plan";
+import { dayKey } from "../lib/intensive";
 import { AI_MAX_TRIES, AI_TIME_LIMIT_MS, TYPED_MAX_TRIES, canRetry, finalGrade, formatLeft } from "../lib/attempts";
 import { Rating } from "ts-fsrs";
 
-export type RoundMode = "mixed" | "translate" | "sprint" | "tutor";
+export type RoundMode = "mixed" | "translate" | "tutor";
 
 interface Props {
   progress: Progress;
@@ -81,17 +81,14 @@ export function Round({ progress, update, onDone, mode }: Props) {
   useEffect(() => {
     if (data.state !== "ready" || queue !== null || topics === null) return;
     const now = new Date();
+    // intensive mode only scales these normal rounds (sizes, today's new-word goal, exam-list order)
+    const load = sessionLoad(progress, data.words, now);
     if (mode === "tutor") {
-      setQueue(buildTutorSession(data.words, topics, progress.memory, now, { size: 6 }));
+      setQueue(buildTutorSession(data.words, topics, progress.memory, now, { size: load.tutorSize, newMax: load.tutorNewMax, newFirst: load.newFirst, examFirst: load.examFirst }));
     } else if (mode === "translate") {
       setQueue(buildTranslateRound(data.words, progress.memory, now, { size: 5 }));
-    } else if (mode === "sprint") {
-      // exam sprint: 20 items, today's remaining new-word goal, official-list words first, translation from streak 1
-      const plan = currentPlan(progress, data.words, now);
-      const newMax = plan ? Math.min(15, newLeftToday(plan, progress.daily?.[dayKey(now)])) : progress.settings.newPerRound;
-      setQueue(buildRound(data.words, progress.memory, now, { size: 20, newMax, tutorReady: ready, examFirst: true, translateFrom: 1 }));
     } else {
-      setQueue(buildRound(data.words, progress.memory, now, { size: 10, newMax: progress.settings.newPerRound, tutorReady: ready }));
+      setQueue(buildRound(data.words, progress.memory, now, { size: load.wordSize, newMax: load.wordNewMax, tutorReady: ready, examFirst: load.examFirst, translateFrom: load.translateFrom }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, queue, mode, ready, topics]);

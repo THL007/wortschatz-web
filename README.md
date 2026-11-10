@@ -20,7 +20,7 @@ The **AI tutor is the main exercise**: a tutor session of 6 sentences, each prac
 | Retries: AI exercises 3 tries in 3 minutes on the same sentence with hints that do not give the answer away; typed answers 1 extra try; unsolved sentences come back next time (no new AI call) | ✓ |
 | Grammatik: 95 topics A1–C1 from the curated inventory (Nantia `grammar_de.csv`); AI-built drills (gap fill / transformation), exact answers checked without AI, others judged by AI with hints; FSRS per topic | ✓ |
 | FSRS-6 scheduling (ts-fsrs, fuzz off), progress in the browser | ✓ |
-| Intensive mode: exam date + minutes per day → daily new-word goal, 20-item sprints, official-list words first, translation from the 2nd success, no review after the exam, last 2 days review-only | ✓ |
+| Intensive mode: exam date + minutes per day scale the normal rounds (tutor 6→8/10/12 sentences, words 10→15/20/25, Grammatik 5→6/8/10); a daily new-word goal shared by tutor and word rounds, official-list words first, translation from the 2nd success, no review after the exam, last 2 days review-only | ✓ |
 | Installable, offline after first visit | ✓ |
 | Accounts, server sync | — |
 

@@ -213,12 +213,6 @@ a { color: var(--color-accent-2); }
 .keybox__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); align-items: end; }
 @media (max-width: 40rem) { .keybox__row { grid-template-columns: minmax(0, 1fr); } }
 
-/* intensive mode: the sprint panel */
-.sprint { background: var(--grain), color-mix(in oklab, var(--color-accent) 22%, var(--color-card)); box-shadow: inset 0 0 0 2px var(--color-accent-deep), var(--shadow-card); }
-.sprint--empty { background: var(--grain), var(--color-paper-2); box-shadow: inset 0 0 0 1px var(--color-rule); }
-.sprint__top { display: grid; gap: var(--space-3xs); }
-.sprint__days { font-size: var(--text-lg); font-weight: 600; }
-.sprint__days .figure { font-size: var(--text-3xl); letter-spacing: var(--tracking-display); font-variant-numeric: tabular-nums; }
 
 /* retry: a nudge, not the answer */
 .retry { display: grid; gap: var(--space-xs); padding: var(--space-md); border-radius: var(--radius-stock); background: var(--grain), color-mix(in oklab, var(--color-accent-3) 14%, var(--color-card)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent-3) 45%, var(--color-rule)); }
@@ -246,3 +240,9 @@ a { color: var(--color-accent-2); }
 @media (max-width: 40rem) { .aux { grid-template-columns: minmax(0, 1fr); } }
 .tutor-main .keybox { display: grid; gap: var(--space-sm); box-shadow: none; }
 .table__caption { caption-side: top; text-align: left; padding: var(--space-md) var(--space-lg) var(--space-xs); font-weight: 600; font-size: var(--text-lg); }
+
+/* intensive mode status inside the tutor card */
+.exam { display: grid; gap: var(--space-2xs); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-stock); background: var(--grain), var(--color-card); box-shadow: inset 0 0 0 1px var(--color-rule); }
+.exam--note { color: var(--color-ink-2); }
+.exam__line { font-weight: 600; }
+.exam__days { font-size: var(--text-2xl); letter-spacing: var(--tracking-display); font-variant-numeric: tabular-nums; }
