@@ -4,15 +4,19 @@ import { tutorReady } from "../lib/tutor";
 import { nextIn } from "../lib/srs";
 import { LEVELS, type Progress } from "../lib/types";
 import { estimated, useLevel } from "./useLevel";
+import { currentPlan } from "./plan";
+import { dayKey, daysUntil } from "../lib/intensive";
+import { SprintPanel } from "./SprintPanel";
 
 interface Props {
   progress: Progress;
   update: (fn: (p: Progress) => Progress) => void;
   onStart: () => void;
   onTranslate: () => void;
+  onSprint: () => void;
 }
 
-export function Today({ progress, update, onStart, onTranslate }: Props) {
+export function Today({ progress, update, onStart, onTranslate, onSprint }: Props) {
   const { level, newPerRound } = progress.settings;
   const [attempt, setAttempt] = useState(0);
   const data = useLevel(level, attempt);
@@ -77,6 +81,18 @@ export function Today({ progress, update, onStart, onTranslate }: Props) {
             Try again
           </button>
         </div>
+      )}
+
+      {data.state === "ready" && progress.settings.intensive.on && (
+        <SprintPanel
+          plan={currentPlan(progress, data.words, now)}
+          examDate={progress.settings.intensive.examDate}
+          daysLeft={progress.settings.intensive.examDate ? daysUntil(progress.settings.intensive.examDate, now) : NaN}
+          today={progress.daily?.[dayKey(now)]}
+          level={level}
+          stats={levelStats(data.words, progress.memory, now)}
+          onSprint={onSprint}
+        />
       )}
 
       {data.state === "ready" && (() => {

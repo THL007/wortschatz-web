@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { reset } from "../lib/store";
 import { MODEL_PRESETS } from "../lib/tutor";
+import type { Minutes } from "../lib/intensive";
 import type { Progress, Settings } from "../lib/types";
 
 interface Props {
@@ -49,6 +50,35 @@ export function SettingsScreen({ progress, update }: Props) {
             ))}
           </div>
         </fieldset>
+      </div>
+
+      <div className="panel form">
+        <h2>Intensive mode</h2>
+        <p className="note">For an exam soon and little time: a daily goal, 20-item sprints, official-list words first, and no review scheduled after your exam.</p>
+        <fieldset className="field">
+          <legend>Status</legend>
+          <div className="segmented" role="radiogroup" aria-label="Intensive mode">
+            {[false, true].map((on) => (
+              <button key={String(on)} type="button" role="radio" aria-checked={s.intensive.on === on} className="seg" onClick={() => set({ intensive: { ...s.intensive, on } })}>{on ? "On" : "Off"}</button>
+            ))}
+          </div>
+        </fieldset>
+        {s.intensive.on && (
+          <>
+            <label className="field">
+              <span>Exam date</span>
+              <input type="date" value={s.intensive.examDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => set({ intensive: { ...s.intensive, examDate: e.target.value } })} />
+            </label>
+            <fieldset className="field">
+              <legend>Time per day</legend>
+              <div className="segmented" role="radiogroup" aria-label="Minutes per day">
+                {([15, 30, 60] as Minutes[]).map((m) => (
+                  <button key={m} type="button" role="radio" aria-checked={s.intensive.minutes === m} className="seg" onClick={() => set({ intensive: { ...s.intensive, minutes: m } })}>{m} min</button>
+                ))}
+              </div>
+            </fieldset>
+          </>
+        )}
       </div>
 
       <form

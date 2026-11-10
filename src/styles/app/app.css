@@ -174,6 +174,8 @@ a { color: var(--color-accent-2); }
     background: var(--color-paper-2); border-top: var(--rule-hair) solid var(--color-rule);
   }
   .tabs a { justify-content: center; min-height: 48px; padding: 0 var(--space-xs); }
+  /* keep scrolled-to and focused controls clear of the fixed bottom bar */
+  html { scroll-padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom)); }
   .main { padding: var(--space-lg) var(--space-md) calc(var(--space-3xl) + env(safe-area-inset-bottom)); }
   .stats dd { font-size: var(--text-2xl); }
   .typed { grid-template-columns: minmax(0, 1fr); }
@@ -210,3 +212,10 @@ a { color: var(--color-accent-2); }
 .keybox { box-shadow: inset 0 0 0 2px var(--color-accent-deep), var(--shadow-card); }
 .keybox__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); align-items: end; }
 @media (max-width: 40rem) { .keybox__row { grid-template-columns: minmax(0, 1fr); } }
+
+/* intensive mode: the sprint panel */
+.sprint { background: var(--grain), color-mix(in oklab, var(--color-accent) 22%, var(--color-card)); box-shadow: inset 0 0 0 2px var(--color-accent-deep), var(--shadow-card); }
+.sprint--empty { background: var(--grain), var(--color-paper-2); box-shadow: inset 0 0 0 1px var(--color-rule); }
+.sprint__top { display: grid; gap: var(--space-3xs); }
+.sprint__days { font-size: var(--text-lg); font-weight: 600; }
+.sprint__days .figure { font-size: var(--text-3xl); letter-spacing: var(--tracking-display); font-variant-numeric: tabular-nums; }

@@ -1,4 +1,5 @@
 import type { Card } from "ts-fsrs";
+import type { DayLog, IntensiveSettings } from "./intensive";
 
 export type Level = "A1" | "A2" | "B1" | "B2" | "C1";
 export const LEVELS: Level[] = ["A1", "A2", "B1", "B2", "C1"];
@@ -42,12 +43,15 @@ export interface Settings {
   openRouterModel: string;
   /** the learner's own language: translation source + explanations */
   explainIn: "English" | "Français";
+  intensive: IntensiveSettings;
 }
 
 export interface Progress {
   version: 1;
   settings: Settings;
   memory: Record<string, Memory>;
+  /** per local day: new words introduced and reviews done (intensive goal tracking) */
+  daily?: Record<string, DayLog>;
 }
 
 export type Verdict = "right" | "close" | "wrong";

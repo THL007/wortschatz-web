@@ -3,14 +3,26 @@ import type { Memory } from "./types";
 
 // FSRS-6 default weights, fuzz off (Nantia LONG-TERM-POLICY).
 const scheduler = fsrs(generatorParameters({ enable_fuzz: false }));
+// Intensive mode caps intervals at the days left before the exam; one scheduler per cap.
+const capped = new Map<number, ReturnType<typeof fsrs>>();
+const schedulerFor = (maxIntervalDays?: number) => {
+  if (!maxIntervalDays) return scheduler;
+  if (!capped.has(maxIntervalDays)) capped.set(maxIntervalDays, fsrs(generatorParameters({ enable_fuzz: false, maximum_interval: maxIntervalDays })));
+  return capped.get(maxIntervalDays)!;
+};
 
 export function newMemory(now: Date): Memory {
   return { card: createEmptyCard(now), streak: 0, seen: 0 };
 }
 
 /** Apply one graded review. Again/Hard reset the streak; Good/Easy extend it. */
-export function review(mem: Memory, grade: Grade, now: Date): Memory {
-  const { card } = scheduler.next(mem.card, now, grade);
+export function review(mem: Memory, grade: Grade, now: Date, opts: { maxIntervalDays?: number } = {}): Memory {
+  let { card } = schedulerFor(opts.maxIntervalDays).next(mem.card, now, grade);
+  // hard guarantee for intensive mode: no review lands after the exam (ts-fsrs alone can exceed the cap)
+  if (opts.maxIntervalDays) {
+    const latest = now.getTime() + opts.maxIntervalDays * 86_400_000;
+    if (new Date(card.due).getTime() > latest) card = { ...card, due: new Date(latest), scheduled_days: opts.maxIntervalDays };
+  }
   const good = grade === Rating.Good || grade === Rating.Easy;
   return { card, streak: good ? mem.streak + 1 : 0, seen: mem.seen + 1 };
 }

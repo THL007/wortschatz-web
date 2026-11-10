@@ -2,7 +2,7 @@ import { isDue } from "./srs";
 import type { Exercise, ExerciseKind, Memory, Word } from "./types";
 
 /** Which exercise fits this word at this streak. All deterministic kinds come from wordhoard forms. */
-export function exerciseFor(word: Word, mem: Memory | undefined, tutorReady: boolean): Exercise {
+export function exerciseFor(word: Word, mem: Memory | undefined, tutorReady: boolean, translateFrom = 2): Exercise {
   const streak = mem?.streak ?? 0;
   const kinds: ExerciseKind[] = [];
   if (word.pos === "NOUN") {
@@ -13,8 +13,8 @@ export function exerciseFor(word: Word, mem: Memory | undefined, tutorReady: boo
     if (word.pp) kinds.push("pp");
   }
   // AI exercises once the word is familiar: translate from your language (streak >= 2), then write freely (>= 3)
-  if (tutorReady && streak >= 2) kinds.push("translate");
-  if (tutorReady && streak >= 3) kinds.push("write");
+  if (tutorReady && streak >= translateFrom) kinds.push("translate");
+  if (tutorReady && streak >= translateFrom + 1) kinds.push("write");
   const kind = kinds[streak % kinds.length] ?? "article";
   const answer =
     kind === "article" ? word.gender : kind === "plural" ? word.plural ?? undefined : kind === "p3" ? word.p3 ?? undefined : kind === "pp" ? word.pp ?? undefined : undefined;
@@ -29,7 +29,7 @@ export function buildRound(
   words: Word[],
   memory: Record<string, Memory>,
   now: Date,
-  opts: { size: number; newMax: number; tutorReady: boolean },
+  opts: { size: number; newMax: number; tutorReady: boolean; examFirst?: boolean; translateFrom?: number },
 ): Exercise[] {
   const byId = new Map(words.map((w) => [w.id, w]));
   const due = Object.entries(memory)
@@ -38,9 +38,10 @@ export function buildRound(
     .map(([id]) => byId.get(id)!);
   const fresh = words
     .filter((w) => !memory[w.id])
-    .sort((a, b) => a.rank - b.rank)
+    // exam sprint: words calibrated on official lists (anchored) first, each group by frequency
+    .sort((a, b) => (opts.examFirst ? Number(b.anchored) - Number(a.anchored) : 0) || a.rank - b.rank)
     .slice(0, Math.max(0, Math.min(opts.newMax, opts.size - due.length)));
-  return [...due, ...fresh].slice(0, opts.size).map((w) => exerciseFor(w, memory[w.id], opts.tutorReady));
+  return [...due, ...fresh].slice(0, opts.size).map((w) => exerciseFor(w, memory[w.id], opts.tutorReady, opts.translateFrom));
 }
 
 export function levelStats(words: Word[], memory: Record<string, Memory>, now: Date) {

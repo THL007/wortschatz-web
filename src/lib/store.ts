@@ -9,6 +9,7 @@ export const defaultSettings: Settings = {
   openRouterKey: "",
   openRouterModel: DEFAULT_MODEL,
   explainIn: "English",
+  intensive: { on: false, examDate: "", minutes: 30 },
 };
 
 export function load(): Progress {
@@ -16,7 +17,7 @@ export function load(): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Progress;
-      if (p.version === 1) return { ...p, settings: { ...defaultSettings, ...p.settings, openRouterModel: p.settings?.openRouterModel || DEFAULT_MODEL } };
+      if (p.version === 1) return { ...p, settings: { ...defaultSettings, ...p.settings, openRouterModel: p.settings?.openRouterModel || DEFAULT_MODEL, intensive: { ...defaultSettings.intensive, ...p.settings?.intensive } } };
     }
   } catch {
     /* corrupted storage: start fresh */

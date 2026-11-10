@@ -6,8 +6,10 @@ import { newMemory, nextIn, review } from "../lib/srs";
 import { correct, correctTranslation, generateTask, targetLabel, tutorReady, type Correction, type TranslationTask } from "../lib/tutor";
 import type { Exercise, Memory, Progress, Verdict, Word } from "../lib/types";
 import { useLevel } from "./useLevel";
+import { currentPlan, intervalCap } from "./plan";
+import { dayKey, newLeftToday } from "../lib/intensive";
 
-export type RoundMode = "mixed" | "translate";
+export type RoundMode = "mixed" | "translate" | "sprint";
 
 interface Props {
   progress: Progress;
@@ -54,12 +56,18 @@ export function Round({ progress, update, onDone, mode }: Props) {
   useEffect(() => {
     if (data.state !== "ready" || queue !== null) return;
     const now = new Date();
-    setQueue(
-      mode === "translate"
-        ? buildTranslateRound(data.words, progress.memory, now, { size: 5 })
-        : buildRound(data.words, progress.memory, now, { size: 10, newMax: progress.settings.newPerRound, tutorReady: ready }),
-    );
-  }, [data, queue, mode, progress.memory, progress.settings.newPerRound, ready]);
+    if (mode === "translate") {
+      setQueue(buildTranslateRound(data.words, progress.memory, now, { size: 5 }));
+    } else if (mode === "sprint") {
+      // exam sprint: 20 items, today's remaining new-word goal, official-list words first, translation from streak 1
+      const plan = currentPlan(progress, data.words, now);
+      const newMax = plan ? Math.min(15, newLeftToday(plan, progress.daily?.[dayKey(now)])) : progress.settings.newPerRound;
+      setQueue(buildRound(data.words, progress.memory, now, { size: 20, newMax, tutorReady: ready, examFirst: true, translateFrom: 1 }));
+    } else {
+      setQueue(buildRound(data.words, progress.memory, now, { size: 10, newMax: progress.settings.newPerRound, tutorReady: ready }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, queue, mode, ready]);
 
   const ex = queue?.[index];
   const known = data.state === "ready" ? knownLabels(data.words, progress.memory) : [];
@@ -84,12 +92,18 @@ export function Round({ progress, update, onDone, mode }: Props) {
   const grade = (verdict: Verdict, g: Grade, extra: Partial<Outcome> = {}) => {
     if (!ex) return;
     const now = new Date();
+    const isNew = !progress.memory[ex.word.id];
     const prev: Memory = progress.memory[ex.word.id] ?? newMemory(now);
-    const mem = review(prev, g, now);
-    update((p) => ({ ...p, memory: { ...p.memory, [ex.word.id]: mem } }));
+    const mem = review(prev, g, now, { maxIntervalDays: intervalCap(progress, now) });
+    const day = dayKey(now);
+    update((p) => {
+      const log = p.daily?.[day] ?? { new: 0, reviews: 0 };
+      const daily = { ...p.daily, [day]: isNew ? { ...log, new: log.new + 1 } : { ...log, reviews: log.reviews + 1 } };
+      return { ...p, memory: { ...p.memory, [ex.word.id]: mem }, daily };
+    });
     if (verdict === "right") setRight((r) => r + 1);
     // a missed word comes back once later in this round (short-term practice)
-    if (verdict !== "right" && !requeued.current.has(ex.word.id) && queue && mode === "mixed") {
+    if (verdict !== "right" && !requeued.current.has(ex.word.id) && queue && mode !== "translate") {
       requeued.current.add(ex.word.id);
       setQueue([...queue, exerciseFor(ex.word, { ...mem, streak: 0 }, false)]);
     }

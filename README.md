@@ -15,6 +15,7 @@ Learn the German words your exam uses most. Words are grouped by CEFR level (A1 
 | Translate into German: AI writes a sentence in English or French with the target word, AI corrects your German | ✓ only with your own OpenRouter key and model id |
 | Write-a-sentence with AI correction | ✓ same |
 | FSRS-6 scheduling (ts-fsrs, fuzz off), progress in the browser | ✓ |
+| Intensive mode: exam date + minutes per day → daily new-word goal, 20-item sprints, official-list words first, translation from the 2nd success, no review after the exam, last 2 days review-only | ✓ |
 | Installable, offline after first visit | ✓ |
 | Accounts, server sync | — |
 
