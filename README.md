@@ -37,6 +37,10 @@ Rebuild word data (needs the wordhoard CSV): `WORDHOARD_CSV=path/to/de_wordhoard
 - Levels A1 to B1 are calibrated by wordhoard on official word lists; B2 and C1 are frequency estimates and are labelled as such.
 - Goethe-Institut and Hueber material is **not** in this repository (local use only). Not affiliated with Goethe-Institut or telc.
 
+## AI models
+
+Default: `anthropic/claude-haiku-5.5`. Presets: Claude Sonnet 5.5 (strongest), GPT-6 Luna (cheap, slower). Picked with `scripts/eval_models.ts` on 2026-11-10: 4 AI-built sentences + 8 hand-checked translations (4 correct, 4 with gender/case/word-order errors) per model, using the app's own prompts. All three presets scored 4/4, 8/8 and 4/4 fixes. Small test; real use may differ.
+
 ## Design
 
 Built with the Hallmark design skill, theme Hum (playful): cream paper, card-stock controls, Chillax type. Stamps and waivers are at the top of `src/styles/landing.css` and `src/styles/app/app.css`.
