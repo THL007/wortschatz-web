@@ -1,5 +1,6 @@
 import { isDue } from "./srs";
-import type { Exercise, ExerciseKind, Memory, Word } from "./types";
+import type { Exercise, ExerciseKind, GrammarTopic, Memory, Word } from "./types";
+import { pickTopics } from "./grammar";
 
 /** Which exercise fits this word at this streak. All deterministic kinds come from wordhoard forms. */
 export function exerciseFor(word: Word, mem: Memory | undefined, tutorReady: boolean, translateFrom = 2): Exercise {
@@ -66,4 +67,21 @@ export function buildTranslateRound(words: Word[], memory: Record<string, Memory
   const rest = started.filter((w) => !isDue(memory[w.id], now)).sort((a, b) => a.rank - b.rank);
   const fresh = words.filter((w) => !memory[w.id]).sort((a, b) => a.rank - b.rank);
   return [...due, ...rest, ...fresh].slice(0, opts.size).map((word) => ({ kind: "translate" as const, word }));
+}
+
+/**
+ * Tutor session (the main exercise): translation sentences, each also practising one grammar topic
+ * of the level. Words: due first, then started, then new by frequency (buildTranslateRound).
+ * Topics: due first, then unseen in teaching order (pickTopics), cycled over the sentences.
+ */
+export function buildTutorSession(
+  words: Word[],
+  topics: GrammarTopic[],
+  memory: Record<string, Memory>,
+  now: Date,
+  opts: { size: number },
+): Exercise[] {
+  const items = buildTranslateRound(words, memory, now, { size: opts.size });
+  const picked = pickTopics(topics, memory, now, Math.min(opts.size, topics.length));
+  return items.map((e, i) => (picked.length ? { ...e, grammar: picked[i % picked.length] } : e));
 }

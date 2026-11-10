@@ -7,6 +7,9 @@ Learn the German words your exam uses most. Words are grouped by CEFR level (A1 
 
 ## What is in v0.1
 
+The **AI tutor is the main exercise**: a tutor session of 6 sentences, each practising one word and one Grammatik topic of the level. Word rounds and Grammatik rounds are extras.
+
+
 | Part | Status |
 |---|---|
 | Landing page with a playable der/die/das round | ✓ |
@@ -15,6 +18,7 @@ Learn the German words your exam uses most. Words are grouped by CEFR level (A1 
 | Translate into German: AI writes a sentence in English or French with the target word, AI corrects your German | ✓ only with your own OpenRouter key and model id |
 | Write-a-sentence with AI correction | ✓ same |
 | Retries: AI exercises 3 tries in 3 minutes on the same sentence with hints that do not give the answer away; typed answers 1 extra try; unsolved sentences come back next time (no new AI call) | ✓ |
+| Grammatik: 95 topics A1–C1 from the curated inventory (Nantia `grammar_de.csv`); AI-built drills (gap fill / transformation), exact answers checked without AI, others judged by AI with hints; FSRS per topic | ✓ |
 | FSRS-6 scheduling (ts-fsrs, fuzz off), progress in the browser | ✓ |
 | Intensive mode: exam date + minutes per day → daily new-word goal, 20-item sprints, official-list words first, translation from the 2nd success, no review after the exam, last 2 days review-only | ✓ |
 | Installable, offline after first visit | ✓ |

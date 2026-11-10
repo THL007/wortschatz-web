@@ -1,10 +1,12 @@
-import type { Settings, Word } from "./types";
+import type { GrammarTopic, Settings, Word } from "./types";
 
 /** Structured correction returned by the tutor (validated before use). */
 export interface Correction {
   isCorrect: boolean;
   corrected: string;
   targetUsed: boolean;
+  /** tutor session with a grammar point: did the learner's German use it correctly? */
+  grammarUsed?: boolean;
   errors: { wrong: string; fix: string; why: string; hint: string }[];
 }
 
@@ -12,6 +14,7 @@ export interface Correction {
 export interface TranslationTask {
   source: string; // in the learner's language
   reference: string; // one good German translation, uses the target word
+  grammar?: string; // GrammarTopic id the sentence practises
 }
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -31,10 +34,10 @@ export const tutorReady = (s: Settings) => s.openRouterKey.trim().length > 0 && 
 
 export const targetLabel = (w: Word) => (w.pos === "NOUN" ? `${w.gender} ${w.word}` : w.word);
 
-type Message = { role: "system" | "user"; content: string };
+export type Message = { role: "system" | "user"; content: string };
 export type Fetcher = typeof fetch;
 
-async function chat(messages: Message[], s: Settings, f: Fetcher, temperature: number): Promise<string> {
+export async function chat(messages: Message[], s: Settings, f: Fetcher, temperature: number): Promise<string> {
   const res = await f(ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${s.openRouterKey}`, "Content-Type": "application/json", "X-Title": "Wortschatz" },
@@ -52,7 +55,7 @@ async function chat(messages: Message[], s: Settings, f: Fetcher, temperature: n
   return data?.choices?.[0]?.message?.content ?? "";
 }
 
-const firstJson = (text: string): Record<string, unknown> | null => {
+export const firstJson = (text: string): Record<string, unknown> | null => {
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
@@ -76,6 +79,7 @@ export function parseCorrection(text: string): Correction | null {
     isCorrect: j.isCorrect,
     corrected: j.corrected,
     targetUsed: Boolean(j.targetUsed),
+    grammarUsed: typeof j.grammarUsed === "boolean" ? j.grammarUsed : undefined,
     errors: (j.errors as unknown[])
       .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
       .map((e) => ({ wrong: String(e.wrong ?? ""), fix: String(e.fix ?? ""), why: String(e.why ?? ""), hint: String(e.hint ?? "") })),
@@ -92,16 +96,17 @@ export function parseTask(text: string, word: Word): TranslationTask | null {
   return { source, reference };
 }
 
-const CORRECTION_SHAPE = '{"isCorrect":boolean,"corrected":string,"targetUsed":boolean,"errors":[{"wrong":string,"fix":string,"why":string,"hint":string}]}';
+export const CORRECTION_SHAPE = '{"isCorrect":boolean,"corrected":string,"targetUsed":boolean,"errors":[{"wrong":string,"fix":string,"why":string,"hint":string}]}';
 /** The learner may retry: "hint" must nudge without giving the corrected words away. */
-const HINT_RULE = 'For each error also give "hint": a short nudge that helps the learner fix it without writing the corrected word or sentence (e.g. "Zeit is feminine: check the ending of kein."). Write "why" and "hint" in the learner\'s language, never in German (German words may be quoted). ';
+export const HINT_RULE = 'For each error also give "hint": a short nudge that helps the learner fix it without writing the corrected word or sentence (e.g. "Zeit is feminine: check the ending of kein."). Write "why" and "hint" in the learner\'s language, never in German (German words may be quoted). ';
 
 /**
  * Ask the AI for a short sentence in the learner's language whose natural German translation uses the
  * target word. Only simple words at the learner's level; known words are offered as scaffold, never required.
  * Rejected and retried once if the German reference does not contain the target word.
  */
-export async function generateTask(word: Word, known: string[], s: Settings, f: Fetcher = fetch): Promise<TranslationTask> {
+export async function generateTask(word: Word, known: string[], s: Settings, f: Fetcher = fetch, grammar?: GrammarTopic): Promise<TranslationTask> {
+  const g = grammar ? `The German translation must ALSO use this grammar point naturally: ${grammar.label} (${grammar.name}, CEFR ${grammar.level}). ` : "";
   const messages: Message[] = [
     {
       role: "system",
@@ -109,18 +114,19 @@ export async function generateTask(word: Word, known: string[], s: Settings, f: 
         `You write translation exercises for a learner of German (CEFR ${word.level}) whose own language is ${s.explainIn}. ` +
         `Write ONE short, natural, everyday sentence in ${s.explainIn} (4 to 10 words) whose German translation must use the target word. ` +
         `Keep every other word simple, at CEFR ${word.level} or below. You may reuse these German words the learner knows: ${known.slice(0, 40).join(", ") || "(none yet)"}. ` +
+        g +
         'Reply with JSON only: {"source": "<sentence in the learner language>", "reference": "<one correct German translation>"}',
     },
     { role: "user", content: `Target word: ${targetLabel(word)}` },
   ];
   for (let attempt = 0; attempt < 2; attempt++) {
     const task = parseTask(await chat(messages, s, f, 0.7), word);
-    if (task) return task;
+    if (task) return grammar ? { ...task, grammar: grammar.id } : task;
   }
   throw new Error("The tutor could not build a usable sentence for this word.");
 }
 
-export async function correctTranslation(word: Word, task: TranslationTask, answer: string, s: Settings, f: Fetcher = fetch): Promise<Correction> {
+export async function correctTranslation(word: Word, task: TranslationTask, answer: string, s: Settings, f: Fetcher = fetch, grammar?: GrammarTopic): Promise<Correction> {
   const messages: Message[] = [
     {
       role: "system",
@@ -130,11 +136,12 @@ export async function correctTranslation(word: Word, task: TranslationTask, answ
         "Fix only real errors (grammar, spelling, gender, case, word order, wrong meaning); keep the learner's words when they are correct. " +
         `If correct, "corrected" repeats the learner's sentence. List at most 3 errors; explain each in ${s.explainIn} in under 20 words. ` +
         HINT_RULE +
-        `Reply with JSON only: ${CORRECTION_SHAPE}`,
+        (grammar ? `Also set "grammarUsed": true only if the learner's German correctly uses the grammar point ${grammar.label} (${grammar.name}). ` : "") +
+        `Reply with JSON only: ${grammar ? CORRECTION_SHAPE.replace('"targetUsed":boolean,', '"targetUsed":boolean,"grammarUsed":boolean,') : CORRECTION_SHAPE}`,
     },
     {
       role: "user",
-      content: `Sentence (${s.explainIn}): ${task.source}\nReference German: ${task.reference}\nTarget word: ${targetLabel(word)}\nLearner's German: ${answer}`,
+      content: `Sentence (${s.explainIn}): ${task.source}\nReference German: ${task.reference}\nTarget word: ${targetLabel(word)}${grammar ? `\nGrammar point: ${grammar.label}` : ""}\nLearner's German: ${answer}`,
     },
   ];
   const parsed = parseCorrection(await chat(messages, s, f, 0));

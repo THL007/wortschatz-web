@@ -22,9 +22,21 @@ export interface Word {
 
 export type ExerciseKind = "article" | "plural" | "p3" | "pp" | "translate" | "write";
 
+/** A grammar topic from the user's curated inventory (Nantia vault, grammar_de.csv). */
+export interface GrammarTopic {
+  id: string; // "g:PERFEKT"
+  name: string;
+  label: string; // German label shown to learners, e.g. "Perfekt"
+  level: Level;
+  category: string;
+  order: number; // teaching order
+}
+
 export interface Exercise {
   kind: ExerciseKind;
   word: Word;
+  /** tutor session: the grammar point this sentence also practises */
+  grammar?: GrammarTopic;
   /** expected answer for deterministic kinds */
   answer?: string;
 }
@@ -51,7 +63,9 @@ export interface Progress {
   settings: Settings;
   memory: Record<string, Memory>;
   /** translation sentences not yet solved, revived the next time the word comes up (no new AI call) */
-  tasks?: Record<string, { source: string; reference: string; lang: string }>;
+  tasks?: Record<string, { source: string; reference: string; lang: string; grammar?: string }>;
+  /** Grammatik drills not yet solved, revived next time for that topic (no new AI call) */
+  drills?: Record<string, { instruction: string; prompt: string; answer: string; lang: string }>;
   /** per local day: new words introduced and reviews done (intensive goal tracking) */
   daily?: Record<string, DayLog>;
 }

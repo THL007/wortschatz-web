@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Grade } from "ts-fsrs";
 import { check, gradeCorrection, toGrade } from "../lib/check";
-import { buildRound, buildTranslateRound, exerciseFor } from "../lib/session";
+import { buildRound, buildTranslateRound, buildTutorSession, exerciseFor } from "../lib/session";
+import { loadGrammar, topicsFor } from "../lib/grammar";
 import { newMemory, nextIn, review } from "../lib/srs";
 import { correct, correctTranslation, generateTask, targetLabel, tutorReady, type Correction, type TranslationTask } from "../lib/tutor";
-import type { Exercise, Memory, Progress, Verdict, Word } from "../lib/types";
+import type { Exercise, GrammarTopic, Memory, Progress, Verdict, Word } from "../lib/types";
 import { useLevel } from "./useLevel";
 import { currentPlan, intervalCap } from "./plan";
 import { dayKey, newLeftToday } from "../lib/intensive";
 import { AI_MAX_TRIES, AI_TIME_LIMIT_MS, TYPED_MAX_TRIES, canRetry, finalGrade, formatLeft } from "../lib/attempts";
 import { Rating } from "ts-fsrs";
 
-export type RoundMode = "mixed" | "translate" | "sprint";
+export type RoundMode = "mixed" | "translate" | "sprint" | "tutor";
 
 interface Props {
   progress: Progress;
@@ -28,17 +29,18 @@ interface Outcome {
   reference?: string;
   note?: string;
   tries?: number;
+  grammarLabel?: string;
 }
 
 /** Retry state for the current exercise (reset when the exercise changes). */
-interface Attempt {
+export interface Attempt {
   tries: number;
   startedAt: number;
   last?: Correction;
   lastVerdict: Verdict;
   message?: string;
 }
-const freshAttempt = (): Attempt => ({ tries: 0, startedAt: Date.now(), lastVerdict: "wrong" });
+export const freshAttempt = (): Attempt => ({ tries: 0, startedAt: Date.now(), lastVerdict: "wrong" });
 
 const prompts: Record<Exercise["kind"], (e: Exercise, lang: string) => string> = {
   article: () => "Which article?",
@@ -66,12 +68,22 @@ export function Round({ progress, update, onDone, mode }: Props) {
   const [attempt, setAttempt] = useState<Attempt>(freshAttempt);
   const [clock, setClock] = useState(Date.now());
   const requeued = useRef(new Set<string>());
+  const [topics, setTopics] = useState<GrammarTopic[] | null>(mode === "tutor" ? null : []);
+  useEffect(() => {
+    if (mode !== "tutor") return;
+    loadGrammar()
+      .then((all) => setTopics(topicsFor(all, progress.settings.level)))
+      .catch(() => setTopics([])); // grammar is optional: the session still runs on words
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   // build the round once, when the words arrive
   useEffect(() => {
-    if (data.state !== "ready" || queue !== null) return;
+    if (data.state !== "ready" || queue !== null || topics === null) return;
     const now = new Date();
-    if (mode === "translate") {
+    if (mode === "tutor") {
+      setQueue(buildTutorSession(data.words, topics, progress.memory, now, { size: 6 }));
+    } else if (mode === "translate") {
       setQueue(buildTranslateRound(data.words, progress.memory, now, { size: 5 }));
     } else if (mode === "sprint") {
       // exam sprint: 20 items, today's remaining new-word goal, official-list words first, translation from streak 1
@@ -82,7 +94,7 @@ export function Round({ progress, update, onDone, mode }: Props) {
       setQueue(buildRound(data.words, progress.memory, now, { size: 10, newMax: progress.settings.newPerRound, tutorReady: ready }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, queue, mode, ready]);
+  }, [data, queue, mode, ready, topics]);
 
   const ex = queue?.[index];
   const known = data.state === "ready" ? knownLabels(data.words, progress.memory) : [];
@@ -92,14 +104,14 @@ export function Round({ progress, update, onDone, mode }: Props) {
     if (!ex || ex.kind !== "translate") return;
     // revive an unsolved sentence for this word instead of asking the AI for a new one
     const saved = progress.tasks?.[ex.word.id];
-    if (saved && saved.lang === progress.settings.explainIn) {
-      setTask({ state: "ready", value: { source: saved.source, reference: saved.reference }, revived: true });
+    if (saved && saved.lang === progress.settings.explainIn && (!ex.grammar || saved.grammar === ex.grammar.id)) {
+      setTask({ state: "ready", value: { source: saved.source, reference: saved.reference, grammar: saved.grammar }, revived: true });
       setAttempt(freshAttempt());
       return;
     }
     setTask({ state: "loading" });
     try {
-      setTask({ state: "ready", value: await generateTask(ex.word, known, progress.settings) });
+      setTask({ state: "ready", value: await generateTask(ex.word, known, progress.settings, fetch, ex.grammar) });
       setAttempt(freshAttempt()); // the clock starts when the sentence is on screen
     } catch (e) {
       setTask({ state: "error", message: (e as Error).message });
@@ -139,7 +151,12 @@ export function Round({ progress, update, onDone, mode }: Props) {
         if (solved) delete tasks[ex.word.id];
         else tasks[ex.word.id] = { ...task.value, lang: p.settings.explainIn };
       }
-      return { ...p, memory: { ...p.memory, [ex.word.id]: mem }, daily, tasks };
+      const memory = { ...p.memory, [ex.word.id]: mem };
+      // the sentence's grammar point gets the same grade, but only if the learner really used it (ADR 005: no phantom credit)
+      if (ex.grammar && extra.correction?.grammarUsed) {
+        memory[ex.grammar.id] = review(p.memory[ex.grammar.id] ?? newMemory(now), g, now, { maxIntervalDays: intervalCap(p, now) });
+      }
+      return { ...p, memory, daily, tasks };
     });
     if (verdict === "right") setRight((r) => r + 1);
     // a missed word comes back once later in this round (short-term practice)
@@ -147,7 +164,7 @@ export function Round({ progress, update, onDone, mode }: Props) {
       requeued.current.add(ex.word.id);
       setQueue([...queue, exerciseFor(ex.word, { ...mem, streak: 0 }, false)]);
     }
-    setOutcome({ verdict, expected: ex.answer, next: nextIn(mem, now), ...extra });
+    setOutcome({ verdict, expected: ex.answer, next: nextIn(mem, now), grammarLabel: ex.grammar?.label, ...extra });
   };
 
   const answer = (given: string) => {
@@ -180,7 +197,7 @@ export function Round({ progress, update, onDone, mode }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const c = ex.kind === "translate" && task.value ? await correctTranslation(ex.word, task.value, text, progress.settings) : await correct(ex.word, text, progress.settings);
+      const c = ex.kind === "translate" && task.value ? await correctTranslation(ex.word, task.value, text, progress.settings, fetch, ex.grammar) : await correct(ex.word, text, progress.settings);
       const g = gradeCorrection(c, text);
       const tries = attempt.tries + 1;
       const missing = c.targetUsed ? undefined : ex.kind === "translate" ? `Use ${targetLabel(ex.word)} in your translation.` : `Your sentence does not use ${ex.word.word}.`;
@@ -203,10 +220,11 @@ export function Round({ progress, update, onDone, mode }: Props) {
   const advance = () => {
     setOutcome(null);
     setError(null);
+    setTask({ state: queue?.[index + 1]?.kind === "translate" ? "loading" : "idle" }); // no stale sentence under the next word
     setIndex((i) => i + 1);
   };
 
-  if (mode === "translate" && !ready) {
+  if ((mode === "translate" || mode === "tutor") && !ready) {
     return (
       <section className="screen">
         <div className="panel panel--empty">
@@ -282,7 +300,10 @@ export function Round({ progress, update, onDone, mode }: Props) {
         <p className="card__level">{ex.word.level}{ex.word.anchored ? "" : ", estimated level"}{ex.kind === "translate" ? ", use this word" : ""}</p>
         {ex.kind === "translate" ? (
           <>
-            <p className="card__target" lang="de">{wordOnCard}</p>
+            <div className="card__chips">
+              <p className="card__target" lang="de">{wordOnCard}</p>
+              {ex.grammar && <p className="card__grammar" lang="de">Grammatik: {ex.grammar.label}</p>}
+            </div>
             <h1 id="ex-prompt" className="card__prompt">{prompts.translate(ex, lang)}</h1>
             {task.state === "loading" && <div className="source source--loading" aria-busy="true"><span className="skeleton skeleton--line" /><span>The tutor is writing a sentence…</span></div>}
             {task.state === "error" && (
@@ -406,6 +427,12 @@ function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void })
               ))}
             </ul>
           )}
+          {outcome.grammarLabel && (
+            <p>
+              Grammatik ({outcome.grammarLabel}):{" "}
+              {c.grammarUsed ? "used correctly." : "not used correctly this time. It comes back in a later sentence."}
+            </p>
+          )}
           {outcome.reference && outcome.reference !== c.corrected && <p>Another good way: <span lang="de">{outcome.reference}</span></p>}
           <p className="feedback__ai">Sentence and correction by an AI model via OpenRouter. They can be wrong.</p>
         </div>
@@ -416,7 +443,7 @@ function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void })
   );
 }
 
-function RetryPanel({ attempt, max, left, onGiveUp }: { attempt: Attempt; max: number; left?: number; onGiveUp: () => void }) {
+export function RetryPanel({ attempt, max, left, onGiveUp }: { attempt: Attempt; max: number; left?: number; onGiveUp: () => void }) {
   const errors = attempt.last?.errors ?? [];
   return (
     <div className="retry" role="status" aria-live="polite">

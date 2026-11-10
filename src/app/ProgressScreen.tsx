@@ -3,6 +3,8 @@ import { levelStats } from "../lib/session";
 import { loadLevel } from "../lib/store";
 import { LEVELS, type Level, type Progress } from "../lib/types";
 import { estimated } from "./useLevel";
+import { loadGrammar } from "../lib/grammar";
+import type { GrammarTopic } from "../lib/types";
 
 type Row = { level: Level; total: number; started: number; learned: number; due: number };
 type State = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; rows: Row[] };
@@ -73,6 +75,48 @@ export function ProgressScreen({ progress }: { progress: Progress }) {
           <p className="note">Learned means the word has left short-term practice and is on spaced reviews.</p>
         </div>
       )}
+      <GrammarProgress progress={progress} />
     </section>
+  );
+}
+
+function GrammarProgress({ progress }: { progress: Progress }) {
+  const [topics, setTopics] = useState<GrammarTopic[] | null>(null);
+  useEffect(() => {
+    loadGrammar().then(setTopics).catch(() => setTopics([]));
+  }, []);
+  if (!topics || topics.length === 0) return null;
+  const now = new Date();
+  const rows = LEVELS.map((level) => {
+    const ts = topics.filter((t) => t.level === level);
+    const mem = ts.map((t) => progress.memory[t.id]).filter(Boolean);
+    return { level, total: ts.length, started: mem.length, learned: mem.filter((m) => m.card.state === 2).length, due: mem.filter((m) => new Date(m.card.due) <= now).length };
+  });
+  if (rows.every((r) => r.started === 0)) return null;
+  return (
+    <div className="panel panel--flush">
+      <table className="table">
+        <caption className="table__caption">Grammatik</caption>
+        <thead>
+          <tr><th scope="col">Level</th><th scope="col" className="num">Learned</th><th scope="col" className="num">Started</th><th scope="col" className="num">Due</th><th scope="col">Of all topics</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.level}>
+              <th scope="row">{r.level}</th>
+              <td className="num">{r.learned}</td>
+              <td className="num">{r.started}</td>
+              <td className="num">{r.due}</td>
+              <td>
+                <div className="meter meter--thin" role="img" aria-label={`${r.learned} of ${r.total} topics learned`}>
+                  <span style={{ inlineSize: `${(100 * r.learned) / Math.max(1, r.total)}%` }} />
+                </div>
+                <span className="table__total num">{r.total}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
