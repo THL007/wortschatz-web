@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Wortschatz: German exam words, most frequent first</title>
+    <meta name="description" content="Learn the German words your exam uses most, level by level, reviewed right before you forget." />
+    <meta name="theme-color" content="#f7f3e8" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://api.fontshare.com" />
+    <link href="https://api.fontshare.com/v2/css?f[]=chillax@500,600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles/landing.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="container masthead__bar">
+        <a class="wordmark" href="./">Wortschatz</a>
+        <a class="masthead__action" href="./app/">Open the app</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero sheet-band" aria-labelledby="hero-head">
+        <div class="container hero__grid">
+          <div class="hero__text">
+            <h1 id="hero-head">Learn the words your exam uses most.</h1>
+            <p class="lead">German by CEFR level, most frequent first, reviewed right before you forget.</p>
+            <div class="actions">
+              <a class="btn btn--primary" href="./app/">Start a round</a>
+              <a class="btn" href="#install">Put it on your phone</a>
+            </div>
+          </div>
+
+          <figure class="round" id="round" aria-label="Try it: which article?">
+            <div class="round__top">
+              <span id="round-label">A1, the most frequent nouns</span>
+              <span class="round__count num" id="round-count">1 of 5</span>
+            </div>
+            <div class="round__strip">
+              <span class="round__word" id="round-word" lang="de">Jahr</span>
+            </div>
+            <div class="tiles" role="group" aria-label="Which article?" lang="de">
+              <button class="tile" type="button" data-g="der">der</button>
+              <button class="tile" type="button" data-g="die">die</button>
+              <button class="tile" type="button" data-g="das">das</button>
+            </div>
+            <output class="round__result" id="round-result" aria-live="polite">Tap the article.</output>
+          </figure>
+        </div>
+      </section>
+
+        <section class="container stage stage--levels" id="levels">
+          <div class="stage__text">
+            <h2>1. Pick your exam level.</h2>
+            <p class="lead">Goethe and telc levels A1 to C1. B2 and C1 levels are estimated from frequency.</p>
+          </div>
+          <div class="levelpick">
+            <div class="pills" role="radiogroup" aria-label="Level">
+              <button class="pill" role="radio" aria-checked="true" data-level="A1" data-n="575" data-first="sein">A1</button>
+              <button class="pill" role="radio" aria-checked="false" data-level="A2" data-n="673" data-first="lassen">A2</button>
+              <button class="pill" role="radio" aria-checked="false" data-level="B1" data-n="1,793" data-first="treffen">B1</button>
+              <button class="pill" role="radio" aria-checked="false" data-level="B2" data-n="1,929" data-first="Eid">B2</button>
+              <button class="pill" role="radio" aria-checked="false" data-level="C1" data-n="3,771" data-first="Zeitreise">C1</button>
+            </div>
+            <p class="levelpick__out" id="level-out" aria-live="polite">A1 has <mark>575 nouns and verbs</mark>. You start with <span lang="de">sein</span>.</p>
+          </div>
+        </section>
+
+        <section class="container stage stage--ladder">
+          <div class="stage__text">
+            <h2>2. Most frequent words first.</h2>
+            <p class="lead">Ranked by how often German speakers say them. Jahr comes before Ordnung.</p>
+          </div>
+          <table class="ladder" lang="de">
+            <thead><tr><th scope="col" class="num">Rank</th><th scope="col">Word</th><th scope="col">Plural</th></tr></thead>
+            <tbody>
+              <tr><td class="num">145</td><td>das Jahr</td><td>die Jahre</td></tr>
+              <tr><td class="num">156</td><td>das Kind</td><td>die Kinder</td></tr>
+              <tr><td class="num">159</td><td>der Vater</td><td>die Väter</td></tr>
+              <tr><td class="num">178</td><td>das Geld</td><td>die Gelder</td></tr>
+              <tr><td class="num">198</td><td>die Nacht</td><td>die Nächte</td></tr>
+              <tr><td class="num">219</td><td>das Problem</td><td>die Probleme</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="container stage stage--write">
+          <div class="stage__text">
+            <h2>3. Write a sentence. Get it corrected.</h2>
+            <p class="lead">An AI tutor fixes your German and says why, in English or French.</p>
+          </div>
+          <figure class="correction">
+            <p class="correction__mine" lang="de">Ich habe kein Zeit.</p>
+            <p class="correction__fixed" lang="de">Ich habe <mark>keine</mark> Zeit.</p>
+            <p class="correction__why">Zeit is feminine (die Zeit), so kein becomes keine.</p>
+            <figcaption>An example we wrote to show the format.</figcaption>
+          </figure>
+        </section>
+
+        <section class="container stage stage--spacing">
+          <div class="stage__text">
+            <h2>4. Back right before you forget.</h2>
+            <p class="lead">Spaced reviews with FSRS. Answer well and the gaps grow.</p>
+          </div>
+          <figure class="gaps">
+            <ol class="gaps__row">
+              <li><span class="figure">10</span> min</li>
+              <li><span class="figure">2</span> days</li>
+              <li><span class="figure">11</span> days</li>
+              <li><span class="figure">46</span> days</li>
+              <li><span class="figure">163</span> days</li>
+            </ol>
+            <figcaption>The next review after each right answer to a new word (FSRS-6 defaults).</figcaption>
+          </figure>
+        </section>
+
+      <section class="install container" id="install" aria-labelledby="install-head">
+        <div class="install__text">
+          <h2 id="install-head">Put it on your home screen.</h2>
+          <p class="lead">Works offline. Your progress stays on your phone.</p>
+          <div class="actions">
+            <a class="btn btn--primary" href="./app/">Start a round</a>
+            <button class="btn" type="button" id="install-btn" hidden>Install the app</button>
+          </div>
+        </div>
+        <dl class="install__how">
+          <div><dt>iPhone</dt><dd>Safari: Share, then Add to Home Screen.</dd></div>
+          <div><dt>Android</dt><dd>Chrome menu, then Install app.</dd></div>
+        </dl>
+      </section>
+    </main>
+
+    <footer class="footer" id="sources">
+      <div class="container">
+        <p class="footer__statement">Most frequent first. The rest can wait.</p>
+        <nav class="footer__links" aria-label="Footer">
+          <a href="./app/">Open the app</a>
+          <a href="https://github.com/THL007/wortschatz-web">Code on GitHub</a>
+        </nav>
+        <p class="footer__legal">
+          Word data: <a href="https://github.com/natema/wordhoard">wordhoard</a> and <a href="https://github.com/hermitdave/FrequencyWords">FrequencyWords</a>, both CC BY-SA 4.0; our word lists share that licence.
+          A1 to B1 follow official lists, B2 and C1 are estimates. Not affiliated with Goethe-Institut or telc.
+        </p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/landing.ts"></script>
+  </body>
+</html>

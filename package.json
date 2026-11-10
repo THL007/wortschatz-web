@@ -1,0 +1,32 @@
+{
+  "name": "wortschatz-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Learn German exam vocabulary by CEFR level, most frequent words first, with FSRS reviews and an AI tutor.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "data": "python3 -I scripts/build_words.py ${WORDHOARD_CSV:-../nantia-neo4j/data/raw/cefr/de_wordhoard.csv} public/data",
+    "icons": "sh scripts/icons.sh",
+    "deploy": "sh scripts/deploy-pages.sh"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "ts-fsrs": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "fast-check": "^4.10.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.0"
+  }
+}

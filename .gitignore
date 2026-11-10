@@ -1,0 +1,6 @@
+node_modules
+dist
+.hallmark/shots
+*.log
+# local-only Goethe/Hueber data never goes in this public repo
+data/local
