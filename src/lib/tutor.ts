@@ -94,7 +94,7 @@ export function parseTask(text: string, word: Word): TranslationTask | null {
 
 const CORRECTION_SHAPE = '{"isCorrect":boolean,"corrected":string,"targetUsed":boolean,"errors":[{"wrong":string,"fix":string,"why":string,"hint":string}]}';
 /** The learner may retry: "hint" must nudge without giving the corrected words away. */
-const HINT_RULE = 'For each error also give "hint": a short nudge in the learner\'s language that helps them fix it without writing the corrected word or sentence (e.g. "Zeit is feminine: check the ending of kein."). ';
+const HINT_RULE = 'For each error also give "hint": a short nudge that helps the learner fix it without writing the corrected word or sentence (e.g. "Zeit is feminine: check the ending of kein."). Write "why" and "hint" in the learner\'s language, never in German (German words may be quoted). ';
 
 /**
  * Ask the AI for a short sentence in the learner's language whose natural German translation uses the
