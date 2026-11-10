@@ -1,3 +1,4 @@
+import { DEFAULT_MODEL } from "./tutor";
 import type { Level, Progress, Settings, Word } from "./types";
 
 const KEY = "wortschatz.progress.v1";
@@ -6,7 +7,7 @@ export const defaultSettings: Settings = {
   level: "A1",
   newPerRound: 5,
   openRouterKey: "",
-  openRouterModel: "",
+  openRouterModel: DEFAULT_MODEL,
   explainIn: "English",
 };
 
@@ -15,7 +16,7 @@ export function load(): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Progress;
-      if (p.version === 1) return { ...p, settings: { ...defaultSettings, ...p.settings } };
+      if (p.version === 1) return { ...p, settings: { ...defaultSettings, ...p.settings, openRouterModel: p.settings?.openRouterModel || DEFAULT_MODEL } };
     }
   } catch {
     /* corrupted storage: start fresh */

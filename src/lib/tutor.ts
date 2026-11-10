@@ -16,6 +16,17 @@ export interface TranslationTask {
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
+/**
+ * Model presets, picked by a 12-item eval on 2026-11-10 (sentence building + 8 graded translations,
+ * same prompts as the app). All three scored 8/8 judging and 4/4 fixes; see docs in the vault.
+ */
+export const MODEL_PRESETS = [
+  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", note: "Recommended: fastest in the test, about $0.0001 per call" },
+  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5", note: "Highest quality, about 10 times the cost" },
+  { id: "openai/gpt-6-luna", label: "GPT-6 Luna", note: "Cheapest, a little slower" },
+] as const;
+export const DEFAULT_MODEL = MODEL_PRESETS[0].id;
+
 export const tutorReady = (s: Settings) => s.openRouterKey.trim().length > 0 && s.openRouterModel.trim().length > 0;
 
 export const targetLabel = (w: Word) => (w.pos === "NOUN" ? `${w.gender} ${w.word}` : w.word);
@@ -27,9 +38,15 @@ async function chat(messages: Message[], s: Settings, f: Fetcher, temperature: n
   const res = await f(ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${s.openRouterKey}`, "Content-Type": "application/json", "X-Title": "Wortschatz" },
-    body: JSON.stringify({ model: s.openRouterModel, messages, temperature }),
+    // max_tokens keeps answers short and stops OpenRouter reserving credit for very long replies
+    body: JSON.stringify({ model: s.openRouterModel, messages, temperature, max_tokens: 600 }),
   });
-  if (!res.ok) throw new Error(res.status === 401 ? "OpenRouter rejected the key (401). Check it in Settings." : `OpenRouter answered ${res.status}.`);
+  if (!res.ok)
+    throw new Error(
+      res.status === 401 ? "OpenRouter rejected the key (401). Check it in Settings."
+      : res.status === 402 ? "OpenRouter says the account is out of credit (402). Top up at openrouter.ai or pick a cheaper model."
+      : `OpenRouter answered ${res.status}.`,
+    );
   const data = await res.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
@@ -47,7 +64,7 @@ const firstJson = (text: string): Record<string, unknown> | null => {
 /** Our own check: the target lemma (or a known form of it) must really appear (Nantia ADR 005). */
 export function containsTarget(word: Word, sentence: string): boolean {
   const s = sentence.toLowerCase();
-  const forms = [word.lemma, word.word, word.plural, word.p3, word.pp].filter(Boolean).map((f) => f!.toLowerCase());
+  const forms = [word.lemma, word.word, word.plural, word.p3, word.pp, ...(word.forms ?? [])].filter(Boolean).map((f) => f!.toLowerCase());
   return forms.some((f) => new RegExp(`(^|[^a-zäöüß])${f}([^a-zäöüß]|$)`).test(s));
 }
 

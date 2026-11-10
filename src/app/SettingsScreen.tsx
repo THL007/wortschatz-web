@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { reset } from "../lib/store";
+import { MODEL_PRESETS } from "../lib/tutor";
 import type { Progress, Settings } from "../lib/types";
 
 interface Props {
@@ -12,6 +13,7 @@ export function SettingsScreen({ progress, update }: Props) {
   const [key, setKey] = useState(s.openRouterKey);
   const [model, setModel] = useState(s.openRouterModel);
   const [saved, setSaved] = useState(false);
+  const isCustom = !MODEL_PRESETS.some((m) => m.id === model);
   const [confirming, setConfirming] = useState(false);
 
   const set = (patch: Partial<Settings>) => update((p) => ({ ...p, settings: { ...p.settings, ...patch } }));
@@ -59,16 +61,33 @@ export function SettingsScreen({ progress, update }: Props) {
       >
         <h2>AI tutor</h2>
         <p className="note">
-          Translation sentences and corrections use your own <a href="https://openrouter.ai/keys">OpenRouter</a> key. The key stays in this browser and is sent only to openrouter.ai. Without it, rounds use the word exercises only. Each sentence costs one or two small model calls on your OpenRouter account.
+          Translation sentences and corrections use your own <a href="https://openrouter.ai/keys">OpenRouter</a> key. The key stays in this browser and is sent only to openrouter.ai. Without it, rounds use the word exercises only. A translated sentence costs two model calls on your OpenRouter account (well under a cent with the recommended model).
         </p>
         <label className="field">
           <span>OpenRouter API key</span>
           <input type="password" value={key} onChange={(e) => { setKey(e.target.value); setSaved(false); }} autoComplete="off" spellCheck={false} />
         </label>
-        <label className="field">
-          <span>Model id</span>
-          <input value={model} onChange={(e) => { setModel(e.target.value); setSaved(false); }} placeholder="Copy one from openrouter.ai/models" autoComplete="off" spellCheck={false} />
-        </label>
+        <fieldset className="field">
+          <legend>Model</legend>
+          <div className="choices" role="radiogroup" aria-label="Model">
+            {MODEL_PRESETS.map((m) => (
+              <button key={m.id} type="button" role="radio" aria-checked={model === m.id} className="choice" onClick={() => { setModel(m.id); setSaved(false); }}>
+                <strong>{m.label}</strong>
+                <span>{m.note}</span>
+              </button>
+            ))}
+            <button type="button" role="radio" aria-checked={isCustom} className="choice" onClick={() => { setModel(isCustom ? model : ""); setSaved(false); }}>
+              <strong>Other model</strong>
+              <span>Any model id from openrouter.ai/models</span>
+            </button>
+          </div>
+          {isCustom && (
+            <label className="field">
+              <span>Model id</span>
+              <input value={model} onChange={(e) => { setModel(e.target.value); setSaved(false); }} placeholder="provider/model-name" autoComplete="off" spellCheck={false} />
+            </label>
+          )}
+        </fieldset>
         <div className="form__actions">
           <button className="btn btn--primary" type="submit">Save tutor settings</button>
           {saved && <span role="status">Saved.</span>}

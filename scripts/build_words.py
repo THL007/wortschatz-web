@@ -38,6 +38,8 @@ for r in csv.DictReader(open(src, encoding="utf-8")):
         if "pres.3sg" not in forms and "part.perf" not in forms:
             continue
         item.update(word=lem, p3=forms.get("pres.3sg"), pp=forms.get("part.perf"))
+    # every attested form (lowercase), so the app can recognise "treffe", "lässt", "Nächten" ...
+    item["forms"] = sorted({f.split(":")[0].strip().lower() for f in (r["forms"] or "").split(";") if f.strip()} - {lem})
     seen.add((lem, pos))
     words[lv].append(item)
 

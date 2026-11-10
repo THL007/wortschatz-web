@@ -111,3 +111,20 @@ describe("translate in rounds", () => {
     expect(exerciseFor(nacht, mem, false).kind).not.toBe("translate");
   });
 });
+
+describe("defaults and request shape", () => {
+  it("defaults to the recommended model and caps reply length", async () => {
+    const { DEFAULT_MODEL } = await import("../src/lib/tutor");
+    expect(defaultSettings.openRouterModel).toBe(DEFAULT_MODEL);
+    const { f, calls } = fakeRouter(['{"source":"Good night!","reference":"Gute Nacht!"}']);
+    await generateTask(nacht, [], settings, f);
+    expect((calls[0].body as unknown as { max_tokens: number }).max_tokens).toBe(600);
+  });
+
+  it("recognises any attested verb form via forms", async () => {
+    const { containsTarget } = await import("../src/lib/tutor");
+    const treffen: Word = { id: "v:treffen", lemma: "treffen", word: "treffen", pos: "VERB", rank: 300, level: "B1", anchored: true, p3: "trifft", pp: "getroffen", forms: ["treffe", "traf", "triffst"] };
+    expect(containsTarget(treffen, "Ich treffe morgen meinen Freund.")).toBe(true);
+    expect(containsTarget(treffen, "Ich sehe morgen meinen Freund.")).toBe(false);
+  });
+});

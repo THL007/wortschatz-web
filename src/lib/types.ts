@@ -16,6 +16,7 @@ export interface Word {
   plural?: string | null;
   p3?: string | null; // er/sie/es form
   pp?: string | null; // Partizip II
+  forms?: string[]; // all attested forms, lowercase (wordhoard)
 }
 
 export type ExerciseKind = "article" | "plural" | "p3" | "pp" | "translate" | "write";
