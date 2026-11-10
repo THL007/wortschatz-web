@@ -50,6 +50,8 @@ export interface Progress {
   version: 1;
   settings: Settings;
   memory: Record<string, Memory>;
+  /** translation sentences not yet solved, revived the next time the word comes up (no new AI call) */
+  tasks?: Record<string, { source: string; reference: string; lang: string }>;
   /** per local day: new words introduced and reviews done (intensive goal tracking) */
   daily?: Record<string, DayLog>;
 }

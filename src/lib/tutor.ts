@@ -5,7 +5,7 @@ export interface Correction {
   isCorrect: boolean;
   corrected: string;
   targetUsed: boolean;
-  errors: { wrong: string; fix: string; why: string }[];
+  errors: { wrong: string; fix: string; why: string; hint: string }[];
 }
 
 /** A sentence in the learner's language to translate into German. Built by the AI, checked by us. */
@@ -78,7 +78,7 @@ export function parseCorrection(text: string): Correction | null {
     targetUsed: Boolean(j.targetUsed),
     errors: (j.errors as unknown[])
       .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
-      .map((e) => ({ wrong: String(e.wrong ?? ""), fix: String(e.fix ?? ""), why: String(e.why ?? "") })),
+      .map((e) => ({ wrong: String(e.wrong ?? ""), fix: String(e.fix ?? ""), why: String(e.why ?? ""), hint: String(e.hint ?? "") })),
   };
 }
 
@@ -92,7 +92,9 @@ export function parseTask(text: string, word: Word): TranslationTask | null {
   return { source, reference };
 }
 
-const CORRECTION_SHAPE = '{"isCorrect":boolean,"corrected":string,"targetUsed":boolean,"errors":[{"wrong":string,"fix":string,"why":string}]}';
+const CORRECTION_SHAPE = '{"isCorrect":boolean,"corrected":string,"targetUsed":boolean,"errors":[{"wrong":string,"fix":string,"why":string,"hint":string}]}';
+/** The learner may retry: "hint" must nudge without giving the corrected words away. */
+const HINT_RULE = 'For each error also give "hint": a short nudge in the learner\'s language that helps them fix it without writing the corrected word or sentence (e.g. "Zeit is feminine: check the ending of kein."). ';
 
 /**
  * Ask the AI for a short sentence in the learner's language whose natural German translation uses the
@@ -127,6 +129,7 @@ export async function correctTranslation(word: Word, task: TranslationTask, answ
         "Judge the learner's German: accept any correct, natural translation, not only the reference. " +
         "Fix only real errors (grammar, spelling, gender, case, word order, wrong meaning); keep the learner's words when they are correct. " +
         `If correct, "corrected" repeats the learner's sentence. List at most 3 errors; explain each in ${s.explainIn} in under 20 words. ` +
+        HINT_RULE +
         `Reply with JSON only: ${CORRECTION_SHAPE}`,
     },
     {
@@ -149,6 +152,7 @@ export async function correct(word: Word, sentence: string, s: Settings, f: Fetc
         "You are a strict, kind German teacher for exam learners. Correct the learner's German sentence. " +
         "Only fix real errors; keep the learner's meaning and words when possible. " +
         `List at most 3 errors; explain each in ${s.explainIn} in under 20 words. ` +
+        HINT_RULE +
         `Reply with JSON only: ${CORRECTION_SHAPE}`,
     },
     { role: "user", content: `Target word: ${targetLabel(word)}\nLearner sentence: ${sentence}` },

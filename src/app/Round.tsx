@@ -8,6 +8,8 @@ import type { Exercise, Memory, Progress, Verdict, Word } from "../lib/types";
 import { useLevel } from "./useLevel";
 import { currentPlan, intervalCap } from "./plan";
 import { dayKey, newLeftToday } from "../lib/intensive";
+import { AI_MAX_TRIES, AI_TIME_LIMIT_MS, TYPED_MAX_TRIES, canRetry, finalGrade, formatLeft } from "../lib/attempts";
+import { Rating } from "ts-fsrs";
 
 export type RoundMode = "mixed" | "translate" | "sprint";
 
@@ -25,7 +27,18 @@ interface Outcome {
   correction?: Correction;
   reference?: string;
   note?: string;
+  tries?: number;
 }
+
+/** Retry state for the current exercise (reset when the exercise changes). */
+interface Attempt {
+  tries: number;
+  startedAt: number;
+  last?: Correction;
+  lastVerdict: Verdict;
+  message?: string;
+}
+const freshAttempt = (): Attempt => ({ tries: 0, startedAt: Date.now(), lastVerdict: "wrong" });
 
 const prompts: Record<Exercise["kind"], (e: Exercise, lang: string) => string> = {
   article: () => "Which article?",
@@ -49,7 +62,9 @@ export function Round({ progress, update, onDone, mode }: Props) {
   const [right, setRight] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [task, setTask] = useState<{ state: "idle" | "loading" | "ready" | "error"; value?: TranslationTask; message?: string }>({ state: "idle" });
+  const [task, setTask] = useState<{ state: "idle" | "loading" | "ready" | "error"; value?: TranslationTask; message?: string; revived?: boolean }>({ state: "idle" });
+  const [attempt, setAttempt] = useState<Attempt>(freshAttempt);
+  const [clock, setClock] = useState(Date.now());
   const requeued = useRef(new Set<string>());
 
   // build the round once, when the words arrive
@@ -75,9 +90,17 @@ export function Round({ progress, update, onDone, mode }: Props) {
   // translation: ask the AI for a sentence when the exercise appears
   const loadTask = useCallback(async () => {
     if (!ex || ex.kind !== "translate") return;
+    // revive an unsolved sentence for this word instead of asking the AI for a new one
+    const saved = progress.tasks?.[ex.word.id];
+    if (saved && saved.lang === progress.settings.explainIn) {
+      setTask({ state: "ready", value: { source: saved.source, reference: saved.reference }, revived: true });
+      setAttempt(freshAttempt());
+      return;
+    }
     setTask({ state: "loading" });
     try {
       setTask({ state: "ready", value: await generateTask(ex.word, known, progress.settings) });
+      setAttempt(freshAttempt()); // the clock starts when the sentence is on screen
     } catch (e) {
       setTask({ state: "error", message: (e as Error).message });
     }
@@ -85,12 +108,22 @@ export function Round({ progress, update, onDone, mode }: Props) {
   }, [ex?.word.id, ex?.kind, index]);
 
   useEffect(() => {
+    setAttempt(freshAttempt());
     if (ex?.kind === "translate") loadTask();
     else setTask({ state: "idle" });
   }, [index, ex?.kind, loadTask]);
 
+  const isAi = ex?.kind === "translate" || ex?.kind === "write";
+  // countdown for AI exercises; when time runs out the answer is shown
+  useEffect(() => {
+    if (!isAi || outcome) return;
+    const t = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [isAi, outcome, index]);
+
   const grade = (verdict: Verdict, g: Grade, extra: Partial<Outcome> = {}) => {
     if (!ex) return;
+    const solved = verdict === "right";
     const now = new Date();
     const isNew = !progress.memory[ex.word.id];
     const prev: Memory = progress.memory[ex.word.id] ?? newMemory(now);
@@ -99,7 +132,14 @@ export function Round({ progress, update, onDone, mode }: Props) {
     update((p) => {
       const log = p.daily?.[day] ?? { new: 0, reviews: 0 };
       const daily = { ...p.daily, [day]: isNew ? { ...log, new: log.new + 1 } : { ...log, reviews: log.reviews + 1 } };
-      return { ...p, memory: { ...p.memory, [ex.word.id]: mem }, daily };
+      // translation sentences: keep an unsolved one to revive next time, drop a solved one
+      let tasks = p.tasks;
+      if (ex.kind === "translate" && task.value) {
+        tasks = { ...p.tasks };
+        if (solved) delete tasks[ex.word.id];
+        else tasks[ex.word.id] = { ...task.value, lang: p.settings.explainIn };
+      }
+      return { ...p, memory: { ...p.memory, [ex.word.id]: mem }, daily, tasks };
     });
     if (verdict === "right") setRight((r) => r + 1);
     // a missed word comes back once later in this round (short-term practice)
@@ -113,22 +153,45 @@ export function Round({ progress, update, onDone, mode }: Props) {
   const answer = (given: string) => {
     if (!ex || outcome || !ex.answer) return;
     const v = check(given, ex.answer);
-    grade(v, toGrade(v));
+    if (ex.kind === "article") return grade(v, toGrade(v)); // three choices: no retry
+    const tries = attempt.tries + 1;
+    if (v === "right") return grade("right", tries === 1 ? Rating.Good : Rating.Hard, { tries });
+    if (canRetry("typed", tries, attempt.startedAt, Date.now())) {
+      setAttempt({ ...attempt, tries, lastVerdict: v, message: v === "close" ? "Almost: check the umlaut or ß." : "Not quite." });
+      return;
+    }
+    grade(v, v === "close" ? Rating.Hard : Rating.Again, { tries });
   };
+
+  /** End the exercise without a success: show the full answer and grade from the last try. */
+  const giveUp = (note?: string) => {
+    if (!ex || outcome) return;
+    const g = finalGrade(null, attempt.lastVerdict);
+    grade(g.verdict, g.grade, { correction: attempt.last, reference: task.value?.reference, tries: attempt.tries, note });
+  };
+
+  useEffect(() => {
+    if (isAi && !outcome && attempt.tries > 0 && clock - attempt.startedAt >= AI_TIME_LIMIT_MS) giveUp("Time is up for this sentence.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clock]);
 
   const submitAi = async (text: string) => {
     if (!ex || outcome || busy) return;
     setBusy(true);
     setError(null);
     try {
-      if (ex.kind === "translate" && task.value) {
-        const c = await correctTranslation(ex.word, task.value, text, progress.settings);
-        const g = gradeCorrection(c, text);
-        grade(g.verdict, g.grade, { correction: c, reference: task.value.reference, note: c.targetUsed ? undefined : `Use ${targetLabel(ex.word)} in your translation.` });
+      const c = ex.kind === "translate" && task.value ? await correctTranslation(ex.word, task.value, text, progress.settings) : await correct(ex.word, text, progress.settings);
+      const g = gradeCorrection(c, text);
+      const tries = attempt.tries + 1;
+      const missing = c.targetUsed ? undefined : ex.kind === "translate" ? `Use ${targetLabel(ex.word)} in your translation.` : `Your sentence does not use ${ex.word.word}.`;
+      if (g.verdict === "right") {
+        const f = finalGrade(tries);
+        grade(f.verdict, f.grade, { correction: c, reference: task.value?.reference, tries });
+      } else if (canRetry("ai", tries, attempt.startedAt, Date.now())) {
+        setAttempt({ ...attempt, tries, last: c, lastVerdict: g.verdict, message: missing });
       } else {
-        const c = await correct(ex.word, text, progress.settings);
-        const g = gradeCorrection(c, text);
-        grade(g.verdict, g.grade, { correction: c, note: c.targetUsed ? undefined : `Your sentence does not use ${ex.word.word}.` });
+        const f = finalGrade(null, g.verdict);
+        grade(f.verdict, f.grade, { correction: c, reference: task.value?.reference, tries, note: missing });
       }
     } catch (e) {
       setError((e as Error).message);
@@ -197,6 +260,15 @@ export function Round({ progress, update, onDone, mode }: Props) {
   }
 
   const lang = progress.settings.explainIn;
+  // hints sit above the answer box so they are seen before trying again
+  const retryPanel = !outcome && attempt.tries > 0 && (
+    <RetryPanel
+      attempt={attempt}
+      max={isAi ? AI_MAX_TRIES : TYPED_MAX_TRIES}
+      left={isAi ? AI_TIME_LIMIT_MS - (Math.max(clock, Date.now()) - attempt.startedAt) : undefined}
+      onGiveUp={() => giveUp()}
+    />
+  );
   const wordOnCard = ex.kind === "article" ? ex.word.word : ex.kind === "write" || ex.kind === "translate" ? targetLabel(ex.word) : ex.word.lemma;
 
   return (
@@ -222,8 +294,10 @@ export function Round({ progress, update, onDone, mode }: Props) {
             )}
             {task.state === "ready" && task.value && (
               <>
+                {task.revived && attempt.tries === 0 && <p className="note">This one again: you did not solve it last time.</p>}
                 <blockquote className="source" lang={lang === "Français" ? "fr" : "en"}>{task.value.source}</blockquote>
-                <SentenceAnswer key={`t${index}`} busy={busy} done={outcome !== null} onSubmit={submitAi} label="Your German" cta="Check my German" />
+                {retryPanel}
+                <SentenceAnswer key={`t${index}`} busy={busy} done={outcome !== null} onSubmit={submitAi} label="Your German" cta={attempt.tries ? "Check again" : "Check my German"} />
               </>
             )}
           </>
@@ -232,10 +306,12 @@ export function Round({ progress, update, onDone, mode }: Props) {
             <p className="card__word" lang="de">{wordOnCard}</p>
             <h1 id="ex-prompt" className="card__prompt">{prompts[ex.kind](ex, lang)}</h1>
             {ex.kind === "article" && <ArticleTiles key={`${index}`} expected={ex.answer!} done={outcome !== null} onPick={answer} />}
+            {retryPanel}
             {(ex.kind === "plural" || ex.kind === "p3" || ex.kind === "pp") && (
               <TypedAnswer key={`${index}`} prefix={ex.kind === "plural" ? "die" : ex.kind === "p3" ? "er" : undefined} done={outcome !== null} onSubmit={answer} />
             )}
-            {ex.kind === "write" && <SentenceAnswer key={`${index}`} busy={busy} done={outcome !== null} onSubmit={submitAi} label="Your sentence" cta="Correct my sentence" />}
+            {ex.kind === "write" && retryPanel}
+            {ex.kind === "write" && <SentenceAnswer key={`${index}`} busy={busy} done={outcome !== null} onSubmit={submitAi} label="Your sentence" cta={attempt.tries ? "Check again" : "Correct my sentence"} />}
           </>
         )}
         {error && (
@@ -317,6 +393,7 @@ function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void })
   return (
     <div className="feedback" data-verdict={outcome.verdict} role="status">
       <p className="feedback__head">{head}</p>
+      {outcome.tries !== undefined && outcome.tries > 1 && outcome.verdict !== "wrong" && <p className="note">Solved on try {outcome.tries}.</p>}
       {!c && outcome.verdict !== "right" && outcome.expected && <p>Answer: <strong lang="de">{outcome.expected}</strong></p>}
       {outcome.note && <p>{outcome.note}</p>}
       {c && (
@@ -335,6 +412,30 @@ function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void })
       )}
       <p className="feedback__next">Next review: {outcome.next}</p>
       <button ref={btn} className="btn btn--primary" type="button" onClick={onNext}>Continue</button>
+    </div>
+  );
+}
+
+function RetryPanel({ attempt, max, left, onGiveUp }: { attempt: Attempt; max: number; left?: number; onGiveUp: () => void }) {
+  const errors = attempt.last?.errors ?? [];
+  return (
+    <div className="retry" role="status" aria-live="polite">
+      <p className="retry__head">
+        Not yet. Try {attempt.tries + 1} of {max}
+        {left !== undefined && <span className="retry__time num">, {formatLeft(left)} left</span>}
+      </p>
+      {attempt.message && <p>{attempt.message}</p>}
+      {errors.length > 0 && (
+        <ul className="retry__hints">
+          {errors.map((e, i) => (
+            <li key={i}>
+              {e.wrong && <><span className="retry__wrong" lang="de">{e.wrong}</span>: </>}
+              {e.hint || "Look at this part again."}
+            </li>
+          ))}
+        </ul>
+      )}
+      <button className="btn btn--quiet" type="button" onClick={onGiveUp}>Show the answer</button>
     </div>
   );
 }
