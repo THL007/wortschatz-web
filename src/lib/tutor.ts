@@ -21,9 +21,9 @@ const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
  * same prompts as the app). All three scored 8/8 judging and 4/4 fixes; see docs in the vault.
  */
 export const MODEL_PRESETS = [
-  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", note: "Recommended: fastest in the test, about $0.0001 per call" },
-  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5", note: "Highest quality, about 10 times the cost" },
-  { id: "openai/gpt-6-luna", label: "GPT-6 Luna", note: "Cheapest, a little slower" },
+  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", note: "Recommended: fastest, about $0.0001 per sentence" },
+  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5", note: "Strongest model, about $0.002 per sentence" },
+  { id: "openai/gpt-6-luna", label: "GPT-6 Luna", note: "Same low cost as Haiku, about 3 times slower" },
 ] as const;
 export const DEFAULT_MODEL = MODEL_PRESETS[0].id;
 
@@ -38,8 +38,9 @@ async function chat(messages: Message[], s: Settings, f: Fetcher, temperature: n
   const res = await f(ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${s.openRouterKey}`, "Content-Type": "application/json", "X-Title": "Wortschatz" },
-    // max_tokens keeps answers short and stops OpenRouter reserving credit for very long replies
-    body: JSON.stringify({ model: s.openRouterModel, messages, temperature, max_tokens: 600 }),
+    // max_tokens bounds cost and credit reservation; it also counts hidden reasoning, so keep headroom
+    // and ask reasoning models for low effort (ignored by models without reasoning).
+    body: JSON.stringify({ model: s.openRouterModel, messages, temperature, max_tokens: 2000, reasoning: { effort: "low" } }),
   });
   if (!res.ok)
     throw new Error(
@@ -125,7 +126,7 @@ export async function correctTranslation(word: Word, task: TranslationTask, answ
         "You are a strict, kind German teacher for exam learners. The learner translated a sentence into German. " +
         "Judge the learner's German: accept any correct, natural translation, not only the reference. " +
         "Fix only real errors (grammar, spelling, gender, case, word order, wrong meaning); keep the learner's words when they are correct. " +
-        `If correct, "corrected" repeats the learner's sentence. Explain each error in ${s.explainIn}, one short sentence. ` +
+        `If correct, "corrected" repeats the learner's sentence. List at most 3 errors; explain each in ${s.explainIn} in under 20 words. ` +
         `Reply with JSON only: ${CORRECTION_SHAPE}`,
     },
     {
@@ -147,7 +148,7 @@ export async function correct(word: Word, sentence: string, s: Settings, f: Fetc
       content:
         "You are a strict, kind German teacher for exam learners. Correct the learner's German sentence. " +
         "Only fix real errors; keep the learner's meaning and words when possible. " +
-        `Explain each error in ${s.explainIn}, one short sentence. ` +
+        `List at most 3 errors; explain each in ${s.explainIn} in under 20 words. ` +
         `Reply with JSON only: ${CORRECTION_SHAPE}`,
     },
     { role: "user", content: `Target word: ${targetLabel(word)}\nLearner sentence: ${sentence}` },

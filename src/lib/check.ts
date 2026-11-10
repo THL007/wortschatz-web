@@ -34,9 +34,15 @@ export function toGrade(v: Verdict): Grade {
  * AI-corrected answers (translate / write) -> verdict + grade.
  * Target missing -> Again. Correct -> Good. One error -> Hard. More -> Again.
  */
-export function gradeCorrection(c: { isCorrect: boolean; targetUsed: boolean; errors: unknown[] }): { verdict: Verdict; grade: Grade } {
+export function gradeCorrection(
+  c: { isCorrect: boolean; targetUsed: boolean; errors: { wrong?: string }[] },
+  answer = "",
+): { verdict: Verdict; grade: Grade } {
   if (!c.targetUsed) return { verdict: "wrong", grade: Rating.Again };
   if (c.isCorrect) return { verdict: "right", grade: Rating.Good };
+  // one "error" that covers most of the answer means the whole sentence was wrong
+  const len = answer.trim().length;
+  if (len > 0 && c.errors.some((e) => (e.wrong ?? "").trim().length >= 0.6 * len)) return { verdict: "wrong", grade: Rating.Again };
   if (c.errors.length <= 1) return { verdict: "close", grade: Rating.Hard };
   return { verdict: "wrong", grade: Rating.Again };
 }

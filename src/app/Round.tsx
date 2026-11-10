@@ -109,11 +109,11 @@ export function Round({ progress, update, onDone, mode }: Props) {
     try {
       if (ex.kind === "translate" && task.value) {
         const c = await correctTranslation(ex.word, task.value, text, progress.settings);
-        const g = gradeCorrection(c);
+        const g = gradeCorrection(c, text);
         grade(g.verdict, g.grade, { correction: c, reference: task.value.reference, note: c.targetUsed ? undefined : `Use ${targetLabel(ex.word)} in your translation.` });
       } else {
         const c = await correct(ex.word, text, progress.settings);
-        const g = gradeCorrection(c);
+        const g = gradeCorrection(c, text);
         grade(g.verdict, g.grade, { correction: c, note: c.targetUsed ? undefined : `Your sentence does not use ${ex.word.word}.` });
       }
     } catch (e) {

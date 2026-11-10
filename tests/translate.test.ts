@@ -86,8 +86,8 @@ describe("correctTranslation", () => {
 describe("gradeCorrection", () => {
   it("maps correct, one error and many errors", () => {
     expect(gradeCorrection({ isCorrect: true, targetUsed: true, errors: [] }).grade).toBe(Rating.Good);
-    expect(gradeCorrection({ isCorrect: false, targetUsed: true, errors: [1] }).grade).toBe(Rating.Hard);
-    expect(gradeCorrection({ isCorrect: false, targetUsed: true, errors: [1, 2] }).grade).toBe(Rating.Again);
+    expect(gradeCorrection({ isCorrect: false, targetUsed: true, errors: [{}] }).grade).toBe(Rating.Hard);
+    expect(gradeCorrection({ isCorrect: false, targetUsed: true, errors: [{}, {}] }).grade).toBe(Rating.Again);
   });
 });
 
@@ -118,7 +118,7 @@ describe("defaults and request shape", () => {
     expect(defaultSettings.openRouterModel).toBe(DEFAULT_MODEL);
     const { f, calls } = fakeRouter(['{"source":"Good night!","reference":"Gute Nacht!"}']);
     await generateTask(nacht, [], settings, f);
-    expect((calls[0].body as unknown as { max_tokens: number }).max_tokens).toBe(600);
+    expect((calls[0].body as unknown as { max_tokens: number }).max_tokens).toBe(2000);
   });
 
   it("recognises any attested verb form via forms", async () => {
@@ -126,5 +126,14 @@ describe("defaults and request shape", () => {
     const treffen: Word = { id: "v:treffen", lemma: "treffen", word: "treffen", pos: "VERB", rank: 300, level: "B1", anchored: true, p3: "trifft", pp: "getroffen", forms: ["treffe", "traf", "triffst"] };
     expect(containsTarget(treffen, "Ich treffe morgen meinen Freund.")).toBe(true);
     expect(containsTarget(treffen, "Ich sehe morgen meinen Freund.")).toBe(false);
+  });
+});
+
+describe("gradeCorrection: whole-sentence errors", () => {
+  it("treats one error spanning most of the answer as wrong", () => {
+    const c = { isCorrect: false, targetUsed: true, errors: [{ wrong: "Ich habe sein nicht.", fix: "Ich will glücklich sein.", why: "" }] };
+    expect(gradeCorrection(c, "Ich habe sein nicht.").grade).toBe(Rating.Again);
+    const small = { isCorrect: false, targetUsed: true, errors: [{ wrong: "kein", fix: "keine", why: "" }] };
+    expect(gradeCorrection(small, "Ich habe kein Zeit.").grade).toBe(Rating.Hard);
   });
 });
