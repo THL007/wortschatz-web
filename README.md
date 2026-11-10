@@ -12,7 +12,8 @@ Learn the German words your exam uses most. Words are grouped by CEFR level (A1 
 | Landing page with a playable der/die/das round | ✓ |
 | App: Today, Round, Progress, Settings | ✓ |
 | Exercises: article, plural, er/sie/es form, Partizip II | ✓ (from wordhoard forms) |
-| Write-a-sentence with AI correction | ✓ only with your own OpenRouter key and model id |
+| Translate into German: AI writes a sentence in English or French with the target word, AI corrects your German | ✓ only with your own OpenRouter key and model id |
+| Write-a-sentence with AI correction | ✓ same |
 | FSRS-6 scheduling (ts-fsrs, fuzz off), progress in the browser | ✓ |
 | Installable, offline after first visit | ✓ |
 | Accounts, server sync | — |
@@ -42,4 +43,4 @@ Built with the Hallmark design skill, theme Hum (playful): cream paper, card-sto
 
 ## AI tutor and privacy
 
-Your OpenRouter key is stored in your browser's local storage and sent only to `openrouter.ai`. Progress never leaves your device unless you export it. Tutor corrections can be wrong.
+Your OpenRouter key is stored in your browser's local storage and sent only to `openrouter.ai`. A translation exercise makes one call to build the sentence (retried once if its German does not contain the target word) and one to correct your answer. Only the target word's FSRS card is graded, and only if your German really contains it. Progress never leaves your device unless you export it. Tutor corrections can be wrong.

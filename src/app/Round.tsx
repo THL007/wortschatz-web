@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Rating, type Grade } from "ts-fsrs";
-import { check, toGrade } from "../lib/check";
-import { buildRound, exerciseFor } from "../lib/session";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Grade } from "ts-fsrs";
+import { check, gradeCorrection, toGrade } from "../lib/check";
+import { buildRound, buildTranslateRound, exerciseFor } from "../lib/session";
 import { newMemory, nextIn, review } from "../lib/srs";
-import { correct, tutorReady, type Correction } from "../lib/tutor";
-import type { Exercise, Memory, Progress, Verdict } from "../lib/types";
+import { correct, correctTranslation, generateTask, targetLabel, tutorReady, type Correction, type TranslationTask } from "../lib/tutor";
+import type { Exercise, Memory, Progress, Verdict, Word } from "../lib/types";
 import { useLevel } from "./useLevel";
+
+export type RoundMode = "mixed" | "translate";
 
 interface Props {
   progress: Progress;
   update: (fn: (p: Progress) => Progress) => void;
   onDone: () => void;
+  mode: RoundMode;
 }
 
 interface Outcome {
@@ -18,18 +21,24 @@ interface Outcome {
   expected?: string;
   next: string;
   correction?: Correction;
+  reference?: string;
   note?: string;
 }
 
-const prompts: Record<Exercise["kind"], (e: Exercise) => string> = {
+const prompts: Record<Exercise["kind"], (e: Exercise, lang: string) => string> = {
   article: () => "Which article?",
   plural: (e) => `Plural of ${e.word.gender} ${e.word.word}`,
   p3: (e) => `er / sie / es … (${e.word.word})`,
   pp: (e) => `Partizip II of ${e.word.word}`,
-  write: (e) => `Write a sentence with ${e.word.pos === "NOUN" ? `${e.word.gender} ${e.word.word}` : e.word.word}`,
+  translate: (_e, lang) => (lang === "Français" ? "Traduis en allemand" : "Translate into German"),
+  write: (e) => `Write a sentence with ${targetLabel(e.word)}`,
 };
 
-export function Round({ progress, update, onDone }: Props) {
+/** German words the learner already practised: offered to the AI as scaffold for its sentences. */
+const knownLabels = (words: Word[], memory: Record<string, Memory>) =>
+  words.filter((w) => (memory[w.id]?.streak ?? 0) >= 1).map(targetLabel);
+
+export function Round({ progress, update, onDone, mode }: Props) {
   const data = useLevel(progress.settings.level);
   const ready = tutorReady(progress.settings);
   const [queue, setQueue] = useState<Exercise[] | null>(null);
@@ -38,16 +47,39 @@ export function Round({ progress, update, onDone }: Props) {
   const [right, setRight] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [task, setTask] = useState<{ state: "idle" | "loading" | "ready" | "error"; value?: TranslationTask; message?: string }>({ state: "idle" });
   const requeued = useRef(new Set<string>());
 
   // build the round once, when the words arrive
   useEffect(() => {
-    if (data.state === "ready" && queue === null) {
-      setQueue(buildRound(data.words, progress.memory, new Date(), { size: 10, newMax: progress.settings.newPerRound, tutorReady: ready }));
-    }
-  }, [data, queue, progress.memory, progress.settings.newPerRound, ready]);
+    if (data.state !== "ready" || queue !== null) return;
+    const now = new Date();
+    setQueue(
+      mode === "translate"
+        ? buildTranslateRound(data.words, progress.memory, now, { size: 5 })
+        : buildRound(data.words, progress.memory, now, { size: 10, newMax: progress.settings.newPerRound, tutorReady: ready }),
+    );
+  }, [data, queue, mode, progress.memory, progress.settings.newPerRound, ready]);
 
   const ex = queue?.[index];
+  const known = data.state === "ready" ? knownLabels(data.words, progress.memory) : [];
+
+  // translation: ask the AI for a sentence when the exercise appears
+  const loadTask = useCallback(async () => {
+    if (!ex || ex.kind !== "translate") return;
+    setTask({ state: "loading" });
+    try {
+      setTask({ state: "ready", value: await generateTask(ex.word, known, progress.settings) });
+    } catch (e) {
+      setTask({ state: "error", message: (e as Error).message });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ex?.word.id, ex?.kind, index]);
+
+  useEffect(() => {
+    if (ex?.kind === "translate") loadTask();
+    else setTask({ state: "idle" });
+  }, [index, ex?.kind, loadTask]);
 
   const grade = (verdict: Verdict, g: Grade, extra: Partial<Outcome> = {}) => {
     if (!ex) return;
@@ -57,7 +89,7 @@ export function Round({ progress, update, onDone }: Props) {
     update((p) => ({ ...p, memory: { ...p.memory, [ex.word.id]: mem } }));
     if (verdict === "right") setRight((r) => r + 1);
     // a missed word comes back once later in this round (short-term practice)
-    if (verdict !== "right" && !requeued.current.has(ex.word.id) && queue) {
+    if (verdict !== "right" && !requeued.current.has(ex.word.id) && queue && mode === "mixed") {
       requeued.current.add(ex.word.id);
       setQueue([...queue, exerciseFor(ex.word, { ...mem, streak: 0 }, false)]);
     }
@@ -70,18 +102,19 @@ export function Round({ progress, update, onDone }: Props) {
     grade(v, toGrade(v));
   };
 
-  const submitSentence = async (sentence: string) => {
+  const submitAi = async (text: string) => {
     if (!ex || outcome || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const c = await correct(ex.word, sentence, progress.settings);
-      if (!c.targetUsed) {
-        grade("wrong", Rating.Again, { correction: c, note: `Your sentence does not use ${ex.word.word}.` });
-      } else if (c.isCorrect) {
-        grade("right", Rating.Good, { correction: c });
+      if (ex.kind === "translate" && task.value) {
+        const c = await correctTranslation(ex.word, task.value, text, progress.settings);
+        const g = gradeCorrection(c);
+        grade(g.verdict, g.grade, { correction: c, reference: task.value.reference, note: c.targetUsed ? undefined : `Use ${targetLabel(ex.word)} in your translation.` });
       } else {
-        grade(c.errors.length <= 1 ? "close" : "wrong", c.errors.length <= 1 ? Rating.Hard : Rating.Again, { correction: c });
+        const c = await correct(ex.word, text, progress.settings);
+        const g = gradeCorrection(c);
+        grade(g.verdict, g.grade, { correction: c, note: c.targetUsed ? undefined : `Your sentence does not use ${ex.word.word}.` });
       }
     } catch (e) {
       setError((e as Error).message);
@@ -96,6 +129,17 @@ export function Round({ progress, update, onDone }: Props) {
     setIndex((i) => i + 1);
   };
 
+  if (mode === "translate" && !ready) {
+    return (
+      <section className="screen">
+        <div className="panel panel--empty">
+          <h1>Translation needs the AI tutor.</h1>
+          <p>Add your OpenRouter key and a model id in Settings. The tutor builds the sentences and corrects your German.</p>
+          <a className="btn btn--primary" href="#/settings">Open Settings</a>
+        </div>
+      </section>
+    );
+  }
   if (data.state === "loading" || (data.state === "ready" && queue === null)) {
     return (
       <section className="screen" aria-busy="true" aria-label="Loading round">
@@ -138,6 +182,9 @@ export function Round({ progress, update, onDone }: Props) {
     );
   }
 
+  const lang = progress.settings.explainIn;
+  const wordOnCard = ex.kind === "article" ? ex.word.word : ex.kind === "write" || ex.kind === "translate" ? targetLabel(ex.word) : ex.word.lemma;
+
   return (
     <section className="screen round" aria-labelledby="ex-prompt">
       <div className="round__bar">
@@ -146,15 +193,37 @@ export function Round({ progress, update, onDone }: Props) {
       </div>
 
       <div className="card">
-        <p className="card__level">{ex.word.level}{ex.word.anchored ? "" : ", estimated level"}</p>
-        <p className="card__word" lang="de">{ex.kind === "article" ? ex.word.word : ex.kind === "write" ? (ex.word.pos === "NOUN" ? `${ex.word.gender} ${ex.word.word}` : ex.word.word) : ex.word.lemma}</p>
-        <h1 id="ex-prompt" className="card__prompt">{prompts[ex.kind](ex)}</h1>
-
-        {ex.kind === "article" && <ArticleTiles key={`${index}`} expected={ex.answer!} done={outcome !== null} onPick={answer} />}
-        {(ex.kind === "plural" || ex.kind === "p3" || ex.kind === "pp") && (
-          <TypedAnswer key={`${index}`} prefix={ex.kind === "plural" ? "die" : ex.kind === "p3" ? "er" : undefined} done={outcome !== null} onSubmit={answer} />
+        <p className="card__level">{ex.word.level}{ex.word.anchored ? "" : ", estimated level"}{ex.kind === "translate" ? ", use this word" : ""}</p>
+        {ex.kind === "translate" ? (
+          <>
+            <p className="card__target" lang="de">{wordOnCard}</p>
+            <h1 id="ex-prompt" className="card__prompt">{prompts.translate(ex, lang)}</h1>
+            {task.state === "loading" && <div className="source source--loading" aria-busy="true"><span className="skeleton skeleton--line" /><span>The tutor is writing a sentence…</span></div>}
+            {task.state === "error" && (
+              <div className="inline-error" role="alert">
+                {task.message}
+                <button className="btn btn--quiet" type="button" onClick={loadTask}>Try again</button>
+                <button className="btn btn--quiet" type="button" onClick={advance}>Skip</button>
+              </div>
+            )}
+            {task.state === "ready" && task.value && (
+              <>
+                <blockquote className="source" lang={lang === "Français" ? "fr" : "en"}>{task.value.source}</blockquote>
+                <SentenceAnswer key={`t${index}`} busy={busy} done={outcome !== null} onSubmit={submitAi} label="Your German" cta="Check my German" />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="card__word" lang="de">{wordOnCard}</p>
+            <h1 id="ex-prompt" className="card__prompt">{prompts[ex.kind](ex, lang)}</h1>
+            {ex.kind === "article" && <ArticleTiles key={`${index}`} expected={ex.answer!} done={outcome !== null} onPick={answer} />}
+            {(ex.kind === "plural" || ex.kind === "p3" || ex.kind === "pp") && (
+              <TypedAnswer key={`${index}`} prefix={ex.kind === "plural" ? "die" : ex.kind === "p3" ? "er" : undefined} done={outcome !== null} onSubmit={answer} />
+            )}
+            {ex.kind === "write" && <SentenceAnswer key={`${index}`} busy={busy} done={outcome !== null} onSubmit={submitAi} label="Your sentence" cta="Correct my sentence" />}
+          </>
         )}
-        {ex.kind === "write" && <SentenceAnswer key={`${index}`} busy={busy} done={outcome !== null} onSubmit={submitSentence} />}
         {error && (
           <p className="inline-error" role="alert">
             {error} Nothing was graded. You can try again or skip.
@@ -211,14 +280,16 @@ function TypedAnswer({ prefix, done, onSubmit }: { prefix?: string; done: boolea
   );
 }
 
-function SentenceAnswer({ busy, done, onSubmit }: { busy: boolean; done: boolean; onSubmit: (s: string) => void }) {
+function SentenceAnswer({ busy, done, onSubmit, label, cta }: { busy: boolean; done: boolean; onSubmit: (s: string) => void; label: string; cta: string }) {
   const [value, setValue] = useState("");
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => ref.current?.focus(), []);
   return (
     <form className="typed typed--sentence" onSubmit={(e) => { e.preventDefault(); if (value.trim()) onSubmit(value.trim()); }}>
-      <label className="visually-hidden" htmlFor="sentence">Your sentence</label>
-      <textarea id="sentence" lang="de" rows={3} value={value} onChange={(e) => setValue(e.target.value)} disabled={done || busy} />
+      <label className="visually-hidden" htmlFor="sentence">{label}</label>
+      <textarea ref={ref} id="sentence" lang="de" rows={3} value={value} onChange={(e) => setValue(e.target.value)} disabled={done || busy} spellCheck={false} />
       <button className="btn btn--primary" type="submit" disabled={done || busy || !value.trim()} aria-busy={busy}>
-        {busy ? "The tutor is reading…" : "Correct my sentence"}
+        {busy ? "The tutor is reading…" : cta}
       </button>
     </form>
   );
@@ -227,21 +298,16 @@ function SentenceAnswer({ busy, done, onSubmit }: { busy: boolean; done: boolean
 function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void }) {
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus(), []);
-  const head = outcome.verdict === "right" ? "Richtig." : outcome.verdict === "close" ? "Almost: check the umlaut." : "Not this time.";
+  const head = outcome.verdict === "right" ? "Richtig." : outcome.verdict === "close" ? (outcome.correction ? "Almost: one thing to fix." : "Almost: check the umlaut.") : "Not this time.";
   const c = outcome.correction;
-  const body = useMemo(() => {
-    if (c) return null;
-    if (outcome.verdict === "right") return null;
-    return outcome.expected;
-  }, [c, outcome]);
   return (
     <div className="feedback" data-verdict={outcome.verdict} role="status">
       <p className="feedback__head">{head}</p>
-      {body && <p>Answer: <strong lang="de">{body}</strong></p>}
+      {!c && outcome.verdict !== "right" && outcome.expected && <p>Answer: <strong lang="de">{outcome.expected}</strong></p>}
       {outcome.note && <p>{outcome.note}</p>}
       {c && (
         <div className="feedback__correction">
-          <p lang="de"><strong>{c.corrected}</strong></p>
+          {!c.isCorrect && <p lang="de"><strong>{c.corrected}</strong></p>}
           {c.errors.length > 0 && (
             <ul>
               {c.errors.map((e, i) => (
@@ -249,7 +315,8 @@ function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void })
               ))}
             </ul>
           )}
-          <p className="feedback__ai">Correction by an AI model via OpenRouter. It can be wrong.</p>
+          {outcome.reference && outcome.reference !== c.corrected && <p>Another good way: <span lang="de">{outcome.reference}</span></p>}
+          <p className="feedback__ai">Sentence and correction by an AI model via OpenRouter. They can be wrong.</p>
         </div>
       )}
       <p className="feedback__next">Next review: {outcome.next}</p>

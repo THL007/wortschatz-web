@@ -40,8 +40,8 @@ export function SettingsScreen({ progress, update }: Props) {
           </div>
         </fieldset>
         <fieldset className="field">
-          <legend>Explanations in</legend>
-          <div className="segmented" role="radiogroup" aria-label="Explanation language">
+          <legend>Your language (sentences to translate and explanations)</legend>
+          <div className="segmented" role="radiogroup" aria-label="Your language">
             {(["English", "Français"] as const).map((l) => (
               <button key={l} type="button" role="radio" aria-checked={s.explainIn === l} className="seg" onClick={() => set({ explainIn: l })}>{l}</button>
             ))}
@@ -59,7 +59,7 @@ export function SettingsScreen({ progress, update }: Props) {
       >
         <h2>AI tutor</h2>
         <p className="note">
-          Sentence correction uses your own <a href="https://openrouter.ai/keys">OpenRouter</a> key. The key stays in this browser and is sent only to openrouter.ai. Without it, rounds use the word exercises only.
+          Translation sentences and corrections use your own <a href="https://openrouter.ai/keys">OpenRouter</a> key. The key stays in this browser and is sent only to openrouter.ai. Without it, rounds use the word exercises only. Each sentence costs one or two small model calls on your OpenRouter account.
         </p>
         <label className="field">
           <span>OpenRouter API key</span>

@@ -29,3 +29,14 @@ export function toGrade(v: Verdict): Grade {
   if (v === "close") return Rating.Hard;
   return Rating.Again;
 }
+
+/**
+ * AI-corrected answers (translate / write) -> verdict + grade.
+ * Target missing -> Again. Correct -> Good. One error -> Hard. More -> Again.
+ */
+export function gradeCorrection(c: { isCorrect: boolean; targetUsed: boolean; errors: unknown[] }): { verdict: Verdict; grade: Grade } {
+  if (!c.targetUsed) return { verdict: "wrong", grade: Rating.Again };
+  if (c.isCorrect) return { verdict: "right", grade: Rating.Good };
+  if (c.errors.length <= 1) return { verdict: "close", grade: Rating.Hard };
+  return { verdict: "wrong", grade: Rating.Again };
+}

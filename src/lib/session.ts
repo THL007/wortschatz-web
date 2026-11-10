@@ -12,7 +12,8 @@ export function exerciseFor(word: Word, mem: Memory | undefined, tutorReady: boo
     if (word.p3) kinds.push("p3");
     if (word.pp) kinds.push("pp");
   }
-  // association mode (Nantia: streak >= 3 here, 5 in the CLI) -> write a sentence
+  // AI exercises once the word is familiar: translate from your language (streak >= 2), then write freely (>= 3)
+  if (tutorReady && streak >= 2) kinds.push("translate");
   if (tutorReady && streak >= 3) kinds.push("write");
   const kind = kinds[streak % kinds.length] ?? "article";
   const answer =
@@ -52,4 +53,16 @@ export function levelStats(words: Word[], memory: Record<string, Memory>, now: D
     if (isDue(m, now)) due++;
   }
   return { total: words.length, learned, due, started: words.filter((w) => memory[w.id]).length };
+}
+
+/**
+ * A translation round: words you have started come first (due ones oldest first), then new words
+ * in frequency order. Every item is a "translate" exercise (AI-built sentence, AI-corrected answer).
+ */
+export function buildTranslateRound(words: Word[], memory: Record<string, Memory>, now: Date, opts: { size: number }): Exercise[] {
+  const started = words.filter((w) => memory[w.id]);
+  const due = started.filter((w) => isDue(memory[w.id], now)).sort((a, b) => new Date(memory[a.id].card.due).getTime() - new Date(memory[b.id].card.due).getTime());
+  const rest = started.filter((w) => !isDue(memory[w.id], now)).sort((a, b) => a.rank - b.rank);
+  const fresh = words.filter((w) => !memory[w.id]).sort((a, b) => a.rank - b.rank);
+  return [...due, ...rest, ...fresh].slice(0, opts.size).map((word) => ({ kind: "translate" as const, word }));
 }

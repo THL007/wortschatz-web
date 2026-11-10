@@ -9,9 +9,10 @@ interface Props {
   progress: Progress;
   update: (fn: (p: Progress) => Progress) => void;
   onStart: () => void;
+  onTranslate: () => void;
 }
 
-export function Today({ progress, update, onStart }: Props) {
+export function Today({ progress, update, onStart, onTranslate }: Props) {
   const { level, newPerRound } = progress.settings;
   const [attempt, setAttempt] = useState(0);
   const data = useLevel(level, attempt);
@@ -68,7 +69,8 @@ export function Today({ progress, update, onStart }: Props) {
           return (
             <div className="panel panel--empty">
               <h2>All caught up on {level}.</h2>
-              <p>{nextDue ? `Your next review is ${nextIn(nextDue, now)}.` : "Every word of this level is in your reviews."} Pick another level to keep going.</p>
+              <p>{nextDue ? `Your next review is ${nextIn(nextDue, now)}.` : "Every word of this level is in your reviews."} Pick another level, or translate sentences with the words you know.</p>
+              <button className="btn" type="button" onClick={onTranslate}>Translate 5 sentences</button>
             </div>
           );
         }
@@ -85,6 +87,16 @@ export function Today({ progress, update, onStart }: Props) {
             <button className="btn btn--primary btn--wide" type="button" onClick={onStart}>
               Start a round of {roundSize}
             </button>
+            <div className="today__translate">
+              <button className="btn btn--wide" type="button" onClick={onTranslate}>
+                Translate 5 sentences
+              </button>
+              <p className="note">
+                {tutorReady(progress.settings)
+                  ? `The AI tutor writes sentences in ${progress.settings.explainIn} with your ${level} words and corrects your German.`
+                  : "Needs the AI tutor: add your OpenRouter key in Settings."}
+              </p>
+            </div>
           </div>
         );
       })()}

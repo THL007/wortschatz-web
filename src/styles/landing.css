@@ -5,7 +5,7 @@
 /* Hallmark · waive 47b · no user photographs were given · the product round and real word data carry every section */
 /* Hallmark · waive 44c · hero posture is Banner, 50 to 60% of the screen · stage 1 starts above the fold by design */
 /* Hallmark · waive 39b · tiles are set at height 52px · the 55px reading comes from the hero card's -1deg rotation */
-/* Hallmark · answered 23 · Hum allows one pear field a page; .gaps is it (posture: full-palette) */
+/* Hallmark · waive 23 · the review gaps figure is the single pear field on the page · the next review days after each right answer are the figures that field carries */
 /* Hallmark · answered F4 · .btn is Hum card stock, the one filled primary is .btn--primary in pear */
 @import url("./tokens.css");
 @import url("./base.css");
@@ -106,6 +106,7 @@ a { color: var(--color-accent-2); }
 .ladder .num { width: 6ch; color: var(--color-muted); }
 
 .correction { margin: 0; display: grid; gap: var(--space-md); padding: var(--space-xl); border-radius: var(--radius-card); background: var(--grain), var(--fibre), var(--color-card); box-shadow: var(--shadow-card); rotate: 0.6deg; }
+.correction__source { font-size: var(--text-lg); color: var(--color-ink-2); padding-bottom: var(--space-sm); border-bottom: var(--rule-hair) dashed var(--color-rule); }
 .correction__mine { font-size: var(--text-2xl); color: var(--color-muted); text-decoration: line-through; text-decoration-color: var(--color-accent-3); text-decoration-thickness: 3px; }
 .correction__fixed { font-size: var(--text-3xl); font-weight: 600; letter-spacing: var(--tracking-display); }
 .correction__why { font-size: var(--text-lg); max-width: 40ch; }

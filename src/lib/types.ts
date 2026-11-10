@@ -18,7 +18,7 @@ export interface Word {
   pp?: string | null; // Partizip II
 }
 
-export type ExerciseKind = "article" | "plural" | "p3" | "pp" | "write";
+export type ExerciseKind = "article" | "plural" | "p3" | "pp" | "translate" | "write";
 
 export interface Exercise {
   kind: ExerciseKind;
@@ -39,6 +39,7 @@ export interface Settings {
   newPerRound: number;
   openRouterKey: string; // stays in this browser only
   openRouterModel: string;
+  /** the learner's own language: translation source + explanations */
   explainIn: "English" | "Français";
 }
 

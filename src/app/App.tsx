@@ -6,11 +6,11 @@ import { Round } from "./Round";
 import { ProgressScreen } from "./ProgressScreen";
 import { SettingsScreen } from "./SettingsScreen";
 
-export type Route = "today" | "round" | "progress" | "settings";
+export type Route = "today" | "round" | "translate" | "progress" | "settings";
 
 const readRoute = (): Route => {
   const r = location.hash.replace(/^#\/?/, "");
-  return r === "round" || r === "progress" || r === "settings" ? r : "today";
+  return r === "round" || r === "translate" || r === "progress" || r === "settings" ? r : "today";
 };
 
 export function App() {
@@ -40,14 +40,15 @@ export function App() {
       <header className="topbar">
         <a className="topbar__mark" href="../">Wortschatz</a>
         <nav className="tabs" aria-label="App">
-          <a href="#/" aria-current={route === "today" || route === "round" ? "page" : undefined}>Today</a>
+          <a href="#/" aria-current={route === "today" || route === "round" || route === "translate" ? "page" : undefined}>Today</a>
           <a href="#/progress" aria-current={route === "progress" ? "page" : undefined}>Progress</a>
           <a href="#/settings" aria-current={route === "settings" ? "page" : undefined}>Settings</a>
         </nav>
       </header>
       <main className="main">
-        {route === "today" && <Today progress={progress} update={update} onStart={() => go("round")} />}
-        {route === "round" && <Round progress={progress} update={update} onDone={() => go("today")} />}
+        {route === "today" && <Today progress={progress} update={update} onStart={() => go("round")} onTranslate={() => go("translate")} />}
+        {route === "round" && <Round key="mixed" mode="mixed" progress={progress} update={update} onDone={() => go("today")} />}
+        {route === "translate" && <Round key="translate" mode="translate" progress={progress} update={update} onDone={() => go("today")} />}
         {route === "progress" && <ProgressScreen progress={progress} />}
         {route === "settings" && <SettingsScreen progress={progress} update={update} />}
       </main>
