@@ -205,3 +205,8 @@ a { color: var(--color-accent-2); }
 .choice[aria-checked="true"] { background: var(--color-ink); color: var(--color-paper); box-shadow: none; }
 .choice[aria-checked="true"] span { color: color-mix(in oklab, var(--color-paper) 75%, transparent); }
 .choice:disabled { background: var(--color-paper-3); color: var(--color-muted); cursor: not-allowed; }
+
+/* first-run key box on Today */
+.keybox { box-shadow: inset 0 0 0 2px var(--color-accent-deep), var(--shadow-card); }
+.keybox__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); align-items: end; }
+@media (max-width: 40rem) { .keybox__row { grid-template-columns: minmax(0, 1fr); } }

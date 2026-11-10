@@ -17,10 +17,33 @@ export function Today({ progress, update, onStart, onTranslate }: Props) {
   const [attempt, setAttempt] = useState(0);
   const data = useLevel(level, attempt);
   const now = new Date();
+  const [keyDraft, setKeyDraft] = useState("");
+  const ready = tutorReady(progress.settings);
 
   return (
     <section className="screen today" aria-labelledby="today-head">
       <h1 id="today-head">Today</h1>
+
+      {!ready && (
+        <form
+          className="panel keybox"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const k = keyDraft.trim();
+            if (k) update((p) => ({ ...p, settings: { ...p.settings, openRouterKey: k } }));
+          }}
+        >
+          <h2>Turn on the AI tutor</h2>
+          <p className="note">Paste your OpenRouter key once. It stays on this device and unlocks translation and corrections.</p>
+          <div className="keybox__row">
+            <label className="field keybox__field">
+              <span className="visually-hidden">OpenRouter API key</span>
+              <input type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="sk-or-…" autoComplete="off" spellCheck={false} />
+            </label>
+            <button className="btn btn--primary" type="submit" disabled={!keyDraft.trim()}>Save</button>
+          </div>
+        </form>
+      )}
 
       <div className="segmented" role="radiogroup" aria-label="Exam level">
         {LEVELS.map((lv) => (
