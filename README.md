@@ -17,8 +17,10 @@ The **AI tutor is the main exercise**: a tutor session of 6 sentences, each prac
 | Exercises: article, plural, er/sie/es form, Partizip II | ✓ (from wordhoard forms) |
 | Translate into German: AI writes a sentence in English or French with the target word, AI corrects your German | ✓ only with your own OpenRouter key and model id |
 | Write-a-sentence with AI correction | ✓ same |
-| Retries: AI exercises 3 tries in 3 minutes on the same sentence with hints that do not give the answer away; typed answers 1 extra try; unsolved sentences come back next time (no new AI call) | ✓ |
+| Retries: AI exercises 5 tries in 5 minutes on the same sentence with hints that do not give the answer away; typed answers 1 extra try; unsolved sentences come back next time (no new AI call) | ✓ |
 | Grammatik: 95 topics A1–C1 from the curated inventory (Nantia `grammar_de.csv`); AI-built drills (gap fill / transformation), exact answers checked without AI, others judged by AI with hints; FSRS per topic | ✓ |
+| Associability per word (0 = only with its article, 1 = short phrase, 2+ = sentence/compound/genitive with partner words); +1 for target and partners that appear in a passed tutor answer; word rounds lift 0 → 1 | ✓ |
+| Too easy: after a success the learner can retire a word or Grammatik topic (Settings brings them back); solved within 5 tries = learned | ✓ |
 | FSRS-6 scheduling (ts-fsrs, fuzz off), progress in the browser | ✓ |
 | Intensive mode: exam date + minutes per day scale the normal rounds (tutor 6→8/10/12 sentences, words 10→15/20/25, Grammatik 5→6/8/10); a daily new-word goal shared by tutor and word rounds, official-list words first, translation from the 2nd success, no review after the exam, last 2 days review-only | ✓ |
 | Installable, offline after first visit | ✓ |

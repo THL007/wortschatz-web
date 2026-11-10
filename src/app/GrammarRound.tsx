@@ -83,7 +83,8 @@ export function GrammarRound({ progress, update, onDone }: Props) {
   const finish = (verdict: Verdict, grade: Parameters<typeof review>[1], correction: Correction | undefined, tries: number) => {
     if (!topic || !drill.value) return;
     const now = new Date();
-    const mem = review(progress.memory[topic.id] ?? newMemory(now), grade, now, { maxIntervalDays: intervalCap(progress, now) });
+    const reviewed = review(progress.memory[topic.id] ?? newMemory(now), grade, now, { maxIntervalDays: intervalCap(progress, now) });
+    const mem = verdict === "right" ? { ...reviewed, learned: true } : reviewed;
     const solved = verdict === "right";
     const day = dayKey(now);
     update((p) => {
@@ -240,7 +241,21 @@ export function GrammarRound({ progress, update, onDone }: Props) {
           )}
           <p className="feedback__ai">Exercise and check by an AI model via OpenRouter. They can be wrong.</p>
           <p className="feedback__next">Next time for {topic.label}: {done.next}</p>
-          <button className="btn btn--primary" type="button" onClick={next} autoFocus>Continue</button>
+          <div className="feedback__actions">
+            <button className="btn btn--primary" type="button" onClick={next} autoFocus>Continue</button>
+            {done.verdict === "right" && (
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  update((p) => (p.memory[topic.id] ? { ...p, memory: { ...p.memory, [topic.id]: { ...p.memory[topic.id], retired: true, learned: true } } } : p));
+                  next();
+                }}
+              >
+                Too easy
+              </button>
+            )}
+          </div>
         </div>
       )}
     </section>

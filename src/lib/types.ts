@@ -37,6 +37,10 @@ export interface Exercise {
   word: Word;
   /** tutor session: the grammar point this sentence also practises */
   grammar?: GrammarTopic;
+  /** tutor session: word / phrase / sentence, from the target's associability */
+  assocMode?: "word" | "phrase" | "sentence";
+  /** tutor session: partner words that must appear (associability rule) */
+  companions?: Word[];
   /** expected answer for deterministic kinds */
   answer?: string;
 }
@@ -46,6 +50,12 @@ export interface Memory {
   card: Card;
   streak: number; // consecutive Good/Easy
   seen: number;
+  /** associability: 0 = only with its article; higher = combinable with more words (see lib/assoc.ts) */
+  assoc?: number;
+  /** solved in an exercise within the allowed tries (up to 5) */
+  learned?: boolean;
+  /** the learner pressed "Too easy": never asked again (may still appear as a partner word) */
+  retired?: boolean;
 }
 
 export interface Settings {
@@ -63,7 +73,7 @@ export interface Progress {
   settings: Settings;
   memory: Record<string, Memory>;
   /** translation sentences not yet solved, revived the next time the word comes up (no new AI call) */
-  tasks?: Record<string, { source: string; reference: string; lang: string; grammar?: string }>;
+  tasks?: Record<string, { source: string; reference: string; lang: string; grammar?: string; mode?: "word" | "phrase" | "sentence" }>;
   /** Grammatik drills not yet solved, revived next time for that topic (no new AI call) */
   drills?: Record<string, { instruction: string; prompt: string; answer: string; lang: string }>;
   /** per local day: new words introduced and reviews done (intensive goal tracking) */

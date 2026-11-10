@@ -36,10 +36,13 @@ describe("topics", () => {
 
 describe("tutor session", () => {
   const words: Word[] = Array.from({ length: 8 }, (_, i) => ({ id: `n:w${i}`, lemma: `w${i}`, word: `W${i}`, pos: "NOUN", rank: i + 1, level: "A1", anchored: true, gender: "der", plural: null }));
-  it("gives every translation sentence a grammar topic of the level", () => {
-    const s = buildTutorSession(words, topicsFor(topics, "A1"), {}, now, { size: 6 });
+  it("gives phrase and sentence items a grammar topic of the level, new words none", () => {
+    const fresh = buildTutorSession(words, topicsFor(topics, "A1"), {}, now, { size: 6 });
+    expect(fresh.every((e) => e.assocMode === "word" && !e.grammar)).toBe(true);
+    const known: Record<string, Memory> = Object.fromEntries(words.map((w) => [w.id, { ...newMemory(new Date("2026-11-01T00:00:00Z")), assoc: 2 }]));
+    const s = buildTutorSession(words, topicsFor(topics, "A1"), known, now, { size: 6 });
     expect(s.length).toBe(6);
-    expect(s.every((e) => e.kind === "translate" && e.grammar?.level === "A1")).toBe(true);
+    expect(s.every((e) => e.kind === "translate" && e.assocMode === "sentence" && e.grammar?.level === "A1")).toBe(true);
     expect(s.map((e) => e.grammar!.name).slice(0, 3)).toEqual(["PRESENT_SIMPLE", "NOMINATIVE_CASE", "ACCUSATIVE_CASE"]);
   });
   it("works without topics", () => {

@@ -1,6 +1,7 @@
 import { isDue } from "./srs";
 import type { Exercise, ExerciseKind, GrammarTopic, Memory, Word } from "./types";
 import { pickTopics } from "./grammar";
+import { assocOf, modeFor, pickCompanions } from "./assoc";
 
 /** Which exercise fits this word at this streak. All deterministic kinds come from wordhoard forms. */
 export function exerciseFor(word: Word, mem: Memory | undefined, tutorReady: boolean, translateFrom = 2): Exercise {
@@ -34,7 +35,7 @@ export function buildRound(
 ): Exercise[] {
   const byId = new Map(words.map((w) => [w.id, w]));
   const due = Object.entries(memory)
-    .filter(([id, m]) => byId.has(id) && isDue(m, now))
+    .filter(([id, m]) => byId.has(id) && !m.retired && isDue(m, now))
     .sort((a, b) => new Date(a[1].card.due).getTime() - new Date(b[1].card.due).getTime())
     .map(([id]) => byId.get(id)!);
   const fresh = words
@@ -51,7 +52,7 @@ export function levelStats(words: Word[], memory: Record<string, Memory>, now: D
   for (const w of words) {
     const m = memory[w.id];
     if (!m) continue;
-    if (m.card.state === 2 /* Review */) learned++;
+    if (m.learned || m.card.state === 2 /* Review */) learned++;
     if (isDue(m, now)) due++;
   }
   return { total: words.length, learned, due, started: words.filter((w) => memory[w.id]).length };
@@ -67,7 +68,7 @@ export function buildTranslateRound(
   now: Date,
   opts: { size: number; newMax?: number; newFirst?: boolean; examFirst?: boolean },
 ): Exercise[] {
-  const started = words.filter((w) => memory[w.id]);
+  const started = words.filter((w) => memory[w.id] && !memory[w.id].retired); // "Too easy" words are never asked again
   const due = started.filter((w) => isDue(memory[w.id], now)).sort((a, b) => new Date(memory[a.id].card.due).getTime() - new Date(memory[b.id].card.due).getTime());
   const rest = started.filter((w) => !isDue(memory[w.id], now)).sort((a, b) => a.rank - b.rank);
   const fresh = words
@@ -79,10 +80,11 @@ export function buildTranslateRound(
   return order.slice(0, opts.size).map((word) => ({ kind: "translate" as const, word }));
 }
 
+
 /**
- * Tutor session (the main exercise): translation sentences, each also practising one grammar topic
- * of the level. Words: due first, then started, then new by frequency (buildTranslateRound).
- * Topics: due first, then unseen in teaching order (pickTopics), cycled over the sentences.
+ * Tutor session with associability: each item is a word, phrase or sentence exercise depending on
+ * the target's associability, with partner words that are allowed to combine with it.
+ * Grammar topics only go on phrase and sentence items (a lone word cannot show grammar).
  */
 export function buildTutorSession(
   words: Word[],
@@ -93,5 +95,11 @@ export function buildTutorSession(
 ): Exercise[] {
   const items = buildTranslateRound(words, memory, now, opts);
   const picked = pickTopics(topics, memory, now, Math.min(opts.size, topics.length));
-  return items.map((e, i) => (picked.length ? { ...e, grammar: picked[i % picked.length] } : e));
+  let g = 0;
+  return items.map((e, i) => {
+    const mode = modeFor(assocOf(memory[e.word.id]));
+    const companions = pickCompanions(e.word, mode, words, memory, i);
+    const grammar = mode !== "word" && picked.length ? picked[g++ % picked.length] : undefined;
+    return { ...e, assocMode: mode, companions, grammar };
+  });
 }

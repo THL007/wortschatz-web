@@ -246,3 +246,7 @@ a { color: var(--color-accent-2); }
 .exam--note { color: var(--color-ink-2); }
 .exam__line { font-weight: 600; }
 .exam__days { font-size: var(--text-2xl); letter-spacing: var(--tracking-display); font-variant-numeric: tabular-nums; }
+
+/* feedback: Continue + Too easy */
+.feedback__actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.card__with { padding: var(--space-2xs) var(--space-md); border-radius: var(--radius-pill); background: var(--grain), color-mix(in oklab, var(--color-mint) 30%, var(--color-card)); font-size: var(--text-md); font-weight: 600; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-mint-deep) 35%, var(--color-rule)); }

@@ -2,8 +2,8 @@
 import { Rating, type Grade } from "ts-fsrs";
 import type { Verdict } from "./types";
 
-export const AI_MAX_TRIES = 3; // translate / write: same sentence, up to 3 checks
-export const AI_TIME_LIMIT_MS = 3 * 60_000; // ... within 3 minutes
+export const AI_MAX_TRIES = 5; // translate / write / Grammatik: same exercise, up to 5 checks
+export const AI_TIME_LIMIT_MS = 5 * 60_000; // ... within 5 minutes
 export const TYPED_MAX_TRIES = 2; // plural / er-form / Partizip: one extra try
 
 export type AttemptKind = "ai" | "typed";

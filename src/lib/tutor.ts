@@ -7,6 +7,8 @@ export interface Correction {
   targetUsed: boolean;
   /** tutor session with a grammar point: did the learner's German use it correctly? */
   grammarUsed?: boolean;
+  /** ids of partner words that really appear in the learner's answer (credited +1 associability on success) */
+  companionsUsed?: string[];
   errors: { wrong: string; fix: string; why: string; hint: string }[];
 }
 
@@ -55,21 +57,52 @@ export async function chat(messages: Message[], s: Settings, f: Fetcher, tempera
   return data?.choices?.[0]?.message?.content ?? "";
 }
 
-export const firstJson = (text: string): Record<string, unknown> | null => {
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[0]);
-  } catch {
-    return null;
+/** Every top-level JSON object in a reply (models sometimes send a draft and then a corrected one). */
+export function jsonObjects(text: string): Record<string, unknown>[] {
+  const found: Record<string, unknown>[] = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}" && depth > 0) {
+      depth--;
+      if (depth === 0) {
+        try {
+          const v = JSON.parse(text.slice(start, i + 1));
+          if (v && typeof v === "object" && !Array.isArray(v)) found.push(v);
+        } catch {
+          /* not JSON, keep scanning */
+        }
+      }
+    }
   }
+  return found;
+}
+
+/** The last JSON object in a reply (the model's final answer). */
+export const firstJson = (text: string): Record<string, unknown> | null => {
+  const all = jsonObjects(text);
+  return all.length ? all[all.length - 1] : null;
 };
 
 /** Our own check: the target lemma (or a known form of it) must really appear (Nantia ADR 005). */
-export function containsTarget(word: Word, sentence: string): boolean {
+export function containsTarget(word: Word, sentence: string, opts: { compound?: boolean } = {}): boolean {
   const s = sentence.toLowerCase();
   const forms = [word.lemma, word.word, word.plural, word.p3, word.pp, ...(word.forms ?? [])].filter(Boolean).map((f) => f!.toLowerCase());
-  return forms.some((f) => new RegExp(`(^|[^a-zäöüß])${f}([^a-zäöüß]|$)`).test(s));
+  if (forms.some((f) => new RegExp(`(^|[^a-zäöüß])${f}([^a-zäöüß]|$)`).test(s))) return true;
+  // associated words may form a compound (Auto + Bahn -> Autobahn): accept the stem inside a word (4+ letters)
+  if (opts.compound) return forms.some((f) => f.length >= 4 && s.includes(f.replace(/(en|e|n)$/, "").length >= 4 ? f.replace(/(en|e|n)$/, "") : f));
+  return false;
 }
 
 export function parseCorrection(text: string): Correction | null {
@@ -86,14 +119,22 @@ export function parseCorrection(text: string): Correction | null {
   };
 }
 
-export function parseTask(text: string, word: Word): TranslationTask | null {
-  const j = firstJson(text);
-  if (!j || typeof j.source !== "string" || typeof j.reference !== "string") return null;
-  const source = j.source.trim();
-  const reference = j.reference.trim();
-  if (source.length < 3 || source.length > 160 || !reference) return null;
-  if (!containsTarget(word, reference)) return null; // the German answer must teach the target word
-  return { source, reference };
+export function parseTask(text: string, word: Word, companions: Word[] = [], mode: "word" | "phrase" | "sentence" = "sentence"): TranslationTask | null {
+  // try the model's candidates from last to first; take the first one that passes our checks
+  for (const j of jsonObjects(text).reverse()) {
+    if (typeof j.source !== "string" || typeof j.reference !== "string") continue;
+    const source = j.source.trim();
+    const reference = j.reference.trim();
+    if (source.length < 3 || source.length > 160 || !reference) continue;
+    const words = reference.replace(/[.!?,]/g, "").split(/\s+/).filter(Boolean).length;
+    if (mode === "word" && words > 3) continue; // associability 0: only the word with its article
+    if (mode === "phrase" && words > 6) continue;
+    const compound = companions.length > 0;
+    if (!containsTarget(word, reference, { compound })) continue; // the German answer must teach the target word
+    if (companions.some((c) => !containsTarget(c, reference, { compound: true }))) continue; // ...and use every partner word
+    return { source, reference };
+  }
+  return null;
 }
 
 export const CORRECTION_SHAPE = '{"isCorrect":boolean,"corrected":string,"targetUsed":boolean,"errors":[{"wrong":string,"fix":string,"why":string,"hint":string}]}';
@@ -105,28 +146,56 @@ export const HINT_RULE = 'For each error also give "hint": a short nudge that he
  * target word. Only simple words at the learner's level; known words are offered as scaffold, never required.
  * Rejected and retried once if the German reference does not contain the target word.
  */
-export async function generateTask(word: Word, known: string[], s: Settings, f: Fetcher = fetch, grammar?: GrammarTopic): Promise<TranslationTask> {
+export async function generateTask(
+  word: Word,
+  known: string[],
+  s: Settings,
+  f: Fetcher = fetch,
+  grammar?: GrammarTopic,
+  assoc: { mode?: "word" | "phrase" | "sentence"; companions?: Word[] } = {},
+): Promise<TranslationTask> {
+  const mode = assoc.mode ?? "sentence";
+  const companions = assoc.companions ?? [];
+  const partners = companions.map(targetLabel).join(", ");
   const g = grammar ? `The German translation must ALSO use this grammar point naturally: ${grammar.label} (${grammar.name}, CEFR ${grammar.level}). ` : "";
   const messages: Message[] = [
     {
       role: "system",
       content:
         `You write translation exercises for a learner of German (CEFR ${word.level}) whose own language is ${s.explainIn}. ` +
-        `Write ONE short, natural, everyday sentence in ${s.explainIn} (4 to 10 words) whose German translation must use the target word. ` +
-        `Keep every other word simple, at CEFR ${word.level} or below. You may reuse these German words the learner knows: ${known.slice(0, 40).join(", ") || "(none yet)"}. ` +
+        (mode === "word"
+          ? `Give ONLY the target word in ${s.explainIn}: a noun with its article (e.g. "the night"), a verb as infinitive (e.g. "to meet"). "reference" is the German word with its article (e.g. "die Nacht") or the infinitive. No other words. `
+          : mode === "phrase"
+            ? `Write ONE short phrase in ${s.explainIn} (2 to 5 words) whose German translation combines the target word${partners ? ` with: ${partners}` : ""}, plus only articles, prepositions or "und". `
+            : `Write ONE short, natural, everyday sentence in ${s.explainIn} (4 to 12 words) whose German translation must use the target word${partners ? ` together with: ${partners} (they may also form a compound or a genitive, e.g. Auto + Bahn -> "Autobahn" or "die Bahn des Autos")` : ""}. `) +
+        (mode === "word" ? "" : `Keep every other word simple, at CEFR ${word.level} or below. You may reuse these German words the learner knows: ${known.slice(0, 40).join(", ") || "(none yet)"}. `) +
         g +
         'Reply with JSON only: {"source": "<sentence in the learner language>", "reference": "<one correct German translation>"}',
     },
-    { role: "user", content: `Target word: ${targetLabel(word)}` },
+    {
+      role: "user",
+      content:
+        mode === "word"
+          ? `Target word: ${targetLabel(word)}\nOnly the word, no sentence.`
+          : `Target word: ${targetLabel(word)}${partners ? `\nThe German MUST also contain: ${partners}` : ""}`,
+    },
   ];
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const task = parseTask(await chat(messages, s, f, 0.7), word);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const task = parseTask(await chat(messages, s, f, 0.7), word, mode === "word" ? [] : companions, mode);
     if (task) return grammar ? { ...task, grammar: grammar.id } : task;
   }
   throw new Error("The tutor could not build a usable sentence for this word.");
 }
 
-export async function correctTranslation(word: Word, task: TranslationTask, answer: string, s: Settings, f: Fetcher = fetch, grammar?: GrammarTopic): Promise<Correction> {
+export async function correctTranslation(
+  word: Word,
+  task: TranslationTask,
+  answer: string,
+  s: Settings,
+  f: Fetcher = fetch,
+  grammar?: GrammarTopic,
+  companions: Word[] = [],
+): Promise<Correction> {
   const messages: Message[] = [
     {
       role: "system",
@@ -141,12 +210,13 @@ export async function correctTranslation(word: Word, task: TranslationTask, answ
     },
     {
       role: "user",
-      content: `Sentence (${s.explainIn}): ${task.source}\nReference German: ${task.reference}\nTarget word: ${targetLabel(word)}${grammar ? `\nGrammar point: ${grammar.label}` : ""}\nLearner's German: ${answer}`,
+      content: `Sentence (${s.explainIn}): ${task.source}\nReference German: ${task.reference}\nTarget word: ${targetLabel(word)}${companions.length ? `\nAlso required: ${companions.map(targetLabel).join(", ")} (a compound or genitive is fine)` : ""}${grammar ? `\nGrammar point: ${grammar.label}` : ""}\nLearner's German: ${answer}`,
     },
   ];
   const parsed = parseCorrection(await chat(messages, s, f, 0));
   if (!parsed) throw new Error("The tutor's answer could not be read. Nothing was graded.");
-  parsed.targetUsed = containsTarget(word, answer); // our check wins over the model's claim
+  parsed.targetUsed = containsTarget(word, answer, { compound: companions.length > 0 }); // our check wins over the model's claim
+  parsed.companionsUsed = companions.filter((c) => containsTarget(c, answer, { compound: true })).map((c) => c.id);
   return parsed;
 }
 

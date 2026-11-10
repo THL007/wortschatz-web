@@ -22,7 +22,8 @@ export function loadGrammar(): Promise<GrammarTopic[]> {
 export const topicsFor = (all: GrammarTopic[], level: Level) => all.filter((t) => t.level === level).sort((a, b) => a.order - b.order);
 
 /** Due topics first (oldest first), then unseen topics in teaching order, then the rest by due date. */
-export function pickTopics(topics: GrammarTopic[], memory: Record<string, Memory>, now: Date, n: number): GrammarTopic[] {
+export function pickTopics(all: GrammarTopic[], memory: Record<string, Memory>, now: Date, n: number): GrammarTopic[] {
+  const topics = all.filter((t) => !memory[t.id]?.retired); // "Too easy" topics are not asked again
   const due = topics.filter((t) => memory[t.id] && isDue(memory[t.id], now)).sort((a, b) => +new Date(memory[a.id].card.due) - +new Date(memory[b.id].card.due));
   const fresh = topics.filter((t) => !memory[t.id]);
   const rest = topics.filter((t) => memory[t.id] && !isDue(memory[t.id], now)).sort((a, b) => +new Date(memory[a.id].card.due) - +new Date(memory[b.id].card.due));

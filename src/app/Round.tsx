@@ -9,6 +9,7 @@ import type { Exercise, GrammarTopic, Memory, Progress, Verdict, Word } from "..
 import { useLevel } from "./useLevel";
 import { intervalCap, sessionLoad } from "./plan";
 import { dayKey } from "../lib/intensive";
+import { atomicAssoc, bumpAssoc, assocOf } from "../lib/assoc";
 import { AI_MAX_TRIES, AI_TIME_LIMIT_MS, TYPED_MAX_TRIES, canRetry, finalGrade, formatLeft } from "../lib/attempts";
 import { Rating } from "ts-fsrs";
 
@@ -30,6 +31,8 @@ interface Outcome {
   note?: string;
   tries?: number;
   grammarLabel?: string;
+  wordId?: string;
+  wordLabel?: string;
 }
 
 /** Retry state for the current exercise (reset when the exercise changes). */
@@ -101,14 +104,14 @@ export function Round({ progress, update, onDone, mode }: Props) {
     if (!ex || ex.kind !== "translate") return;
     // revive an unsolved sentence for this word instead of asking the AI for a new one
     const saved = progress.tasks?.[ex.word.id];
-    if (saved && saved.lang === progress.settings.explainIn && (!ex.grammar || saved.grammar === ex.grammar.id)) {
+    if (saved && saved.lang === progress.settings.explainIn && (!ex.grammar || saved.grammar === ex.grammar.id) && (saved.mode ?? "sentence") === (ex.assocMode ?? "sentence")) {
       setTask({ state: "ready", value: { source: saved.source, reference: saved.reference, grammar: saved.grammar }, revived: true });
       setAttempt(freshAttempt());
       return;
     }
     setTask({ state: "loading" });
     try {
-      setTask({ state: "ready", value: await generateTask(ex.word, known, progress.settings, fetch, ex.grammar) });
+      setTask({ state: "ready", value: await generateTask(ex.word, known, progress.settings, fetch, ex.grammar, { mode: ex.assocMode, companions: ex.companions }) });
       setAttempt(freshAttempt()); // the clock starts when the sentence is on screen
     } catch (e) {
       setTask({ state: "error", message: (e as Error).message });
@@ -146,9 +149,15 @@ export function Round({ progress, update, onDone, mode }: Props) {
       if (ex.kind === "translate" && task.value) {
         tasks = { ...p.tasks };
         if (solved) delete tasks[ex.word.id];
-        else tasks[ex.word.id] = { ...task.value, lang: p.settings.explainIn };
+        else tasks[ex.word.id] = { ...task.value, lang: p.settings.explainIn, mode: ex.assocMode };
       }
-      const memory = { ...p.memory, [ex.word.id]: mem };
+      let memory: Record<string, Memory> = { ...p.memory, [ex.word.id]: solved ? { ...mem, learned: true, assoc: assocOf(p.memory[ex.word.id]) } : { ...mem, assoc: assocOf(p.memory[ex.word.id]) } };
+      if (solved) {
+        // associability: AI exercises give +1 to the target and every partner word that really appears;
+        // word-round exercises (article, plural, forms) can only lift a word from 0 to 1
+        if (ex.kind === "translate" || ex.kind === "write") memory = bumpAssoc(memory, [ex.word.id, ...(extra.correction?.companionsUsed ?? [])]);
+        else memory[ex.word.id] = atomicAssoc(memory[ex.word.id]);
+      }
       // the sentence's grammar point gets the same grade, but only if the learner really used it (ADR 005: no phantom credit)
       if (ex.grammar && extra.correction?.grammarUsed) {
         memory[ex.grammar.id] = review(p.memory[ex.grammar.id] ?? newMemory(now), g, now, { maxIntervalDays: intervalCap(p, now) });
@@ -161,7 +170,7 @@ export function Round({ progress, update, onDone, mode }: Props) {
       requeued.current.add(ex.word.id);
       setQueue([...queue, exerciseFor(ex.word, { ...mem, streak: 0 }, false)]);
     }
-    setOutcome({ verdict, expected: ex.answer, next: nextIn(mem, now), grammarLabel: ex.grammar?.label, ...extra });
+    setOutcome({ verdict, expected: ex.answer, next: nextIn(mem, now), grammarLabel: ex.grammar?.label, wordId: ex.word.id, wordLabel: targetLabel(ex.word), ...extra });
   };
 
   const answer = (given: string) => {
@@ -194,7 +203,7 @@ export function Round({ progress, update, onDone, mode }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const c = ex.kind === "translate" && task.value ? await correctTranslation(ex.word, task.value, text, progress.settings, fetch, ex.grammar) : await correct(ex.word, text, progress.settings);
+      const c = ex.kind === "translate" && task.value ? await correctTranslation(ex.word, task.value, text, progress.settings, fetch, ex.grammar, ex.assocMode === "word" ? [] : ex.companions ?? []) : await correct(ex.word, text, progress.settings);
       const g = gradeCorrection(c, text);
       const tries = attempt.tries + 1;
       const missing = c.targetUsed ? undefined : ex.kind === "translate" ? `Use ${targetLabel(ex.word)} in your translation.` : `Your sentence does not use ${ex.word.word}.`;
@@ -212,6 +221,14 @@ export function Round({ progress, update, onDone, mode }: Props) {
     } finally {
       setBusy(false);
     }
+  };
+
+  /** "Too easy": never ask this word again (only offered after a success). */
+  const markEasy = () => {
+    if (!outcome?.wordId) return;
+    const id = outcome.wordId;
+    update((p) => (p.memory[id] ? { ...p, memory: { ...p.memory, [id]: { ...p.memory[id], retired: true, learned: true } } } : p));
+    advance();
   };
 
   const advance = () => {
@@ -299,9 +316,13 @@ export function Round({ progress, update, onDone, mode }: Props) {
           <>
             <div className="card__chips">
               <p className="card__target" lang="de">{wordOnCard}</p>
+              {ex.companions && ex.companions.length > 0 && ex.assocMode !== "word" && (
+                <p className="card__with" lang="de">with {ex.companions.map(targetLabel).join(" + ")}</p>
+              )}
               {ex.grammar && <p className="card__grammar" lang="de">Grammatik: {ex.grammar.label}</p>}
             </div>
             <h1 id="ex-prompt" className="card__prompt">{prompts.translate(ex, lang)}</h1>
+            {ex.assocMode === "word" && <p className="note">{lang === "Français" ? "Juste le mot, avec son article." : "Just the word, with its article."}</p>}
             {task.state === "loading" && <div className="source source--loading" aria-busy="true"><span className="skeleton skeleton--line" /><span>The tutor is writing a sentence…</span></div>}
             {task.state === "error" && (
               <div className="inline-error" role="alert">
@@ -340,7 +361,7 @@ export function Round({ progress, update, onDone, mode }: Props) {
         )}
       </div>
 
-      {outcome && <Feedback outcome={outcome} onNext={advance} />}
+      {outcome && <Feedback outcome={outcome} onNext={advance} onEasy={markEasy} />}
     </section>
   );
 }
@@ -403,7 +424,7 @@ function SentenceAnswer({ busy, done, onSubmit, label, cta }: { busy: boolean; d
   );
 }
 
-function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void }) {
+function Feedback({ outcome, onNext, onEasy }: { outcome: Outcome; onNext: () => void; onEasy: () => void }) {
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus(), []);
   const head = outcome.verdict === "right" ? "Richtig." : outcome.verdict === "close" ? (outcome.correction ? "Almost: one thing to fix." : "Almost: check the umlaut.") : "Not this time.";
@@ -435,7 +456,15 @@ function Feedback({ outcome, onNext }: { outcome: Outcome; onNext: () => void })
         </div>
       )}
       <p className="feedback__next">Next review: {outcome.next}</p>
-      <button ref={btn} className="btn btn--primary" type="button" onClick={onNext}>Continue</button>
+      <div className="feedback__actions">
+        <button ref={btn} className="btn btn--primary" type="button" onClick={onNext}>Continue</button>
+        {outcome.verdict === "right" && outcome.wordId && (
+          <button className="btn" type="button" onClick={onEasy} title={`Never ask ${outcome.wordLabel} again`}>
+            Too easy
+          </button>
+        )}
+      </div>
+      {outcome.verdict === "right" && outcome.wordLabel && <p className="note">Too easy skips <span lang="de">{outcome.wordLabel}</span> from now on. You can bring easy words back in Settings.</p>}
     </div>
   );
 }

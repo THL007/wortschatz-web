@@ -126,6 +126,21 @@ export function SettingsScreen({ progress, update }: Props) {
 
       <div className="panel form">
         <h2>Your data</h2>
+        {(() => {
+          const easy = Object.values(progress.memory).filter((m) => m.retired).length;
+          return easy > 0 ? (
+            <div className="form__actions">
+              <span>{easy} {easy === 1 ? "item" : "items"} marked too easy.</span>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => update((p) => ({ ...p, memory: Object.fromEntries(Object.entries(p.memory).map(([k, m]) => [k, m.retired ? { ...m, retired: false } : m])) }))}
+              >
+                Bring them back
+              </button>
+            </div>
+          ) : null;
+        })()}
         <p className="note">Progress is stored only on this device. Export it to keep a copy; the key is left out.</p>
         <div className="form__actions">
           <button className="btn" type="button" onClick={exportProgress}>Export progress</button>
